@@ -34,17 +34,19 @@ const insurancePolicy = require("./routes/insurancePolicyRoutes");
 const insuranceClaim = require("./routes/insuranceClaimRoutes");
 const chatRoute = require("./routes/chat-routes");
 const database = require("./config/config");
+const paypalRoutes = require("./routes/paypal-routes");
+const uploadRoutes = require("./routes/uploadRoutes");
 const cors = require("cors");
 
 
 const app = express();
 
-// Allowed originss
+// Allowed origins
 const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  // "https://atal-home-updated.vercel.app",
-  // "https://atal-dashboard-updated.vercel.app",
+  // "http://localhost:5173",
+  // "http://localhost:5174",
+  "https://atal-home-updated.vercel.app",
+  "https://atal-dashboard-updated.vercel.app",
 ];
 
 // CORS middleware
@@ -74,6 +76,7 @@ require("./corn/PolicyExpiryJob");
 // Serve uploads statically
 app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
 app.use(express.static('public'));
+app.use("/uploads", express.static("uploads"));
 
 
 // Basic route
@@ -115,6 +118,8 @@ app.use("/api", couponRoutes);
 app.use("/api", insurancePolicy)
 app.use("/api", insuranceClaim)
 app.use("/api", chatRoute)
+app.use("/api/paypal", paypalRoutes);
+app.use("/api", uploadRoutes);
 
 
 

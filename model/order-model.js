@@ -18,6 +18,10 @@ const orderSchema = new mongoose.Schema(
         subCategoryName: String,
         quantity: { type: Number, default: 1 },
         createdBy: { type: String },
+        vendorID: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Vendor",
+        },
 
         // Per-item selections
         product_size: [String],
