@@ -138,7 +138,7 @@ const getAllEyeExam = async (req, res) => {
     console.error("Error fetching eye exams:", error);
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch eye exams",
+      message: "Failed to fetch Eye Exams",
       error: error.message,
     });
   }

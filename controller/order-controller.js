@@ -19,13 +19,13 @@ exports.createOrder = async (req, res) => {
     if (!email) {
       return res
         .status(400)
-        .json({ success: false, message: "Email is required" });
+        .json({ success: false, message: "Email required" });
     }
 
     // Verify payment if PayPal
     if (paymentMethod === "PayPal") {
       if (!transactionId)
-        return res.status(400).json({ success: false, message: "Transaction ID missing" });
+        return res.status(400).json({ success: false, message: "Transaction ID not found" });
 
       const verified = await verifyPayPalPayment(transactionId);
 

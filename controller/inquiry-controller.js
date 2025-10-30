@@ -349,7 +349,7 @@ const sendResponseAndRegister = async (req, res) => {
     res.status(200).json({
       success: true,
       message:
-        "Response sent, user registered/reset with auto password, and email sent successfully",
+        "Response sent, user registered/reset with auto Password, and Email sent successfully",
       inquiry,
       user: {
         id: user._id,
