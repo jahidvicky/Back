@@ -131,7 +131,6 @@ exports.createOrder = async (req, res) => {
   }
 };
 
-
 const checkAndUpdateExpiredPolicies = (order) => {
   const now = new Date();
   let updated = false;
@@ -478,4 +477,3 @@ exports.payPolicy = async (req, res) => {
       .json({ success: false, message: "Failed to pay for policy" });
   }
 };
-
