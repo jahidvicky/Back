@@ -45,8 +45,10 @@ const app = express();
 const allowedOrigins = [
   // "http://localhost:5173",
   // "http://localhost:5174",
-  "https://atal-home-updated.vercel.app",
-  "https://atal-dashboard-updated.vercel.app",
+  "https://ataloptical.org",
+  "https://www.ataloptical.org",
+  "https://dashboard.ataloptical.org"
+
 ];
 
 // CORS middleware
