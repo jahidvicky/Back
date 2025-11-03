@@ -93,7 +93,7 @@ const addProduct = async (req, res) => {
         await subCategory.save();
       }
       productData.subCat_id = subCategory._id;
-      
+
     }
 
     // Handle file uploads
@@ -177,10 +177,10 @@ const getAllProducts = async (req, res) => {
     // Status filter (merge with query)
     query.$or = query.$or
       ? [
-          ...query.$or,
-          { productStatus: "Approved" },
-          { productStatus: { $exists: false } },
-        ]
+        ...query.$or,
+        { productStatus: "Approved" },
+        { productStatus: { $exists: false } },
+      ]
       : [{ productStatus: "Approved" }, { productStatus: { $exists: false } }];
 
     // Final query

@@ -23,6 +23,7 @@ router.get(
 );
 
 router.get("/getproductbyId/:id", productController.getProductById);
+
 router.get(
   "/getProductBySubCatId/:subCatId",
   productController.getProductBySubCatId
