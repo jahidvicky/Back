@@ -7,7 +7,7 @@ router.post("/uploads", upload.single("file"), (req, res) => {
   try {
     // Check if file exists
     if (!req.file) {
-      return res.status(400).json({ success: false, message: "No file uploaded." });
+      return res.status(400).json({ success: false, message: "No such file uploaded." });
     }
 
     // Create absolute file URL with protocol (http/https)

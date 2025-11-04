@@ -45,8 +45,9 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
-  // "https://ataloptical.org/api",
-  // "https://dashboard.ataloptical.org/loginNew/api",
+  // "https://ataloptical.org",
+  // "https://www.ataloptical.org",
+  // "https://dashboard.ataloptical.org"
 ];
 
 // CORS middleware
