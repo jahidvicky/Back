@@ -36,6 +36,7 @@ const chatRoute = require("./routes/chat-routes");
 const database = require("./config/config");
 const paypalRoutes = require("./routes/paypal-routes");
 const uploadRoutes = require("./routes/uploadRoutes");
+const discountRoutes = require("./routes/discount-routes");
 const cors = require("cors");
 
 
@@ -43,6 +44,8 @@ const app = express();
 
 // Allowed origins
 const allowedOrigins = [
+  // "http://localhost:5173",
+  // "http://localhost:5174"
   "https://ataloptical.org",
   "https://www.ataloptical.org",
   "https://dashboard.ataloptical.org"
@@ -119,6 +122,7 @@ app.use("/api", insuranceClaim)
 app.use("/api", chatRoute)
 app.use("/api/paypal", paypalRoutes);
 app.use("/api", uploadRoutes);
+app.use("/api", discountRoutes);
 
 
 

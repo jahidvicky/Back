@@ -39,10 +39,14 @@ exports.createOrder = async (req, res) => {
 
       // Optional: ensure amount matches
       const amount = verified.purchase_units?.[0]?.amount?.value;
-      if (parseFloat(amount) !== parseFloat(total)) {
+      const amountPaid = parseFloat(amount);
+      const totalExpected = parseFloat(total);
+      const difference = Math.abs(amountPaid - totalExpected);
+
+      if (difference > 0.05) {
         return res.status(400).json({
           success: false,
-          message: "Payment total mismatch",
+          message: `Payment total mismatch. Expected ${totalExpected}, got ${amountPaid}`,
         });
       }
     }
