@@ -45,7 +45,7 @@ const app = express();
 // Allowed origins
 const allowedOrigins = [
   // "http://localhost:5173",
-  // "http://localhost:5174"
+  // "http://localhost:5174",
   "https://ataloptical.org",
   "https://www.ataloptical.org",
   "https://dashboard.ataloptical.org"
