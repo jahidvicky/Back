@@ -30,6 +30,7 @@ const orderSchema = new mongoose.Schema(
         enhancement: Object,
         thickness: Object,
         tint: Object,
+        status: { type: String, enum: ["Active", "Cancelled"], default: "Active" },
 
         // Policy (insurance) data
         policy: {
