@@ -36,7 +36,7 @@ const ProductSchema = new mongoose.Schema({
     },
     discountValue: {
         type: Number,
-        default: 0, // 10 means 10% or ₹10 depending on discountType
+        default: 0, // 10 means 10% or $10 depending on discountType
     },
 
 
@@ -84,6 +84,10 @@ const ProductSchema = new mongoose.Schema({
     createdDate: { type: Date, default: Date.now },
     modifiedBy: { type: String },
     modifiedDate: { type: Date },
+
+    // Brand field
+    brand_id: { type: mongoose.Schema.Types.ObjectId, ref: "Brand" },
+
 }, { timestamps: true });
 
 module.exports = mongoose.model("Product", ProductSchema);
