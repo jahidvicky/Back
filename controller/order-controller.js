@@ -54,6 +54,52 @@ exports.createOrder = async (req, res) => {
     const orderDate = new Date();
     const trackingNumber = generateTrackingNumber();
 
+    // const cartItemsWithDetails = await Promise.all(
+    //   cartItems.map(async (item) => {
+    //     const product = await productModel.findById(item.id || item.productId);
+
+    //     let updatedPolicy = null;
+    //     if (item.policy) {
+    //       const expiryDate = dayjs(orderDate)
+    //         .add(item.policy.durationDays, "day")
+    //         .toDate();
+
+    //       updatedPolicy = {
+    //         ...item.policy,
+    //         purchasedAt: orderDate,
+    //         expiryDate,
+    //         status: "Active",
+    //         active: true,
+    //         expired: false,
+    //       };
+    //     }
+
+    //     return {
+    //       productId: item.id || item.productId,
+    //       name: item.name,
+    //       price: item.price,
+    //       image: item.image,
+    //       subCategoryName: item.subCategoryName,
+    //       quantity: item.quantity || 1,
+    //       createdBy: product?.createdBy || "admin",
+    //       vendorID:
+    //         item.vendorID ||
+    //         item.vendorId ||
+    //         null,
+
+    //       product_size: item.product_size || [],
+    //       product_color: item.product_color || [],
+    //       lens: item.lens || null,
+    //       enhancement: item.enhancement || null,
+    //       thickness: item.thickness || null,
+    //       tint: item.tint || null,
+
+    //       policy: updatedPolicy,
+    //     };
+    //   })
+    // );
+
+
     const cartItemsWithDetails = await Promise.all(
       cartItems.map(async (item) => {
         const product = await productModel.findById(item.id || item.productId);
@@ -74,18 +120,38 @@ exports.createOrder = async (req, res) => {
           };
         }
 
+        // ✅ Pick correct color variant image (new logic)
+        let selectedColor =
+          (item.product_color && item.product_color[0]) ||
+          item.selectedColor ||
+          null;
+
+        let variantImage = null;
+        let variantImages = [];
+
+        if (product?.product_variants && selectedColor) {
+          const variant = product.product_variants.find(
+            (v) => v.colorName.toLowerCase() === selectedColor.toLowerCase()
+          );
+          if (variant) {
+            variantImage = variant.images?.[0] || null;
+            variantImages = variant.images || [];
+          }
+        }
+
         return {
           productId: item.id || item.productId,
           name: item.name,
           price: item.price,
-          image: item.image,
+
+          // ✅ Prefer color variant image if available
+          image: variantImage || item.image,
+          variantImages, // ✅ store all variant images
+
           subCategoryName: item.subCategoryName,
           quantity: item.quantity || 1,
           createdBy: product?.createdBy || "admin",
-          vendorID:
-            item.vendorID ||
-            item.vendorId ||
-            null,
+          vendorID: item.vendorID || item.vendorId || null,
 
           product_size: item.product_size || [],
           product_color: item.product_color || [],
@@ -98,6 +164,7 @@ exports.createOrder = async (req, res) => {
         };
       })
     );
+
 
     const orderData = {
       ...req.body,

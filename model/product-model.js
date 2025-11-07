@@ -14,16 +14,30 @@ const ProductSchema = new mongoose.Schema({
     product_size: {
         type: [String],
     },
-    product_color: {
-        type: [String],
-        default: []
-    },
+
+    /* ----------------------------------------------------------
+       ✅ NEW STRUCTURE: Color-based image collection
+    -----------------------------------------------------------*/
+    product_variants: [
+        {
+            colorName: { type: String, required: true }, // e.g. "Red", "Black", "Blue"
+            images: [String], // All image URLs for that color
+        },
+    ],
+
+    /* ----------------------------------------------------------
+       🕐 OLD STRUCTURE (commented, not used now)
+    -----------------------------------------------------------*/
+    // product_color: {
+    //     type: [String],
+    //     default: []
+    // },
+    // product_image_collection: [String],
+
     product_price: { type: Number, required: true },
     product_sale_price: { type: Number },
     product_description: { type: String },
     gender: { type: String },
-    product_image_collection: [String],
-
 
     // Discount fields (vendor controlled)
     discountType: {
@@ -36,13 +50,10 @@ const ProductSchema = new mongoose.Schema({
     },
     discountValue: {
         type: Number,
-        default: 0, // 10 means 10% or ₹10 depending on discountType
+        default: 0,
     },
 
-
-
     stockAvailability: { type: Number, default: 0, min: 0 },
-
 
     // Sunglasses
     frame_material: String,
@@ -87,4 +98,3 @@ const ProductSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 module.exports = mongoose.model("Product", ProductSchema);
-
