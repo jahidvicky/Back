@@ -95,6 +95,10 @@ const ProductSchema = new mongoose.Schema({
     createdDate: { type: Date, default: Date.now },
     modifiedBy: { type: String },
     modifiedDate: { type: Date },
+
+    // Brand field
+    brand_id: { type: mongoose.Schema.Types.ObjectId, ref: "Brand" },
+
 }, { timestamps: true });
 
 module.exports = mongoose.model("Product", ProductSchema);

@@ -3,17 +3,17 @@ const Brand = require("../model/brand-model");
 // ADD BRAND 
 const addBrand = async (req, res) => {
     try {
-        const { category, brand } = req.body;
+        const { type, brand } = req.body;
         const image = req.file ? req.file.filename : null;
 
-        if (!category || !brand) {
+        if (!type || !brand) {
             return res
                 .status(400)
-                .json({ success: false, message: "Please provide Category and Brand name" });
+                .json({ success: false, message: "Please provide Type and Brand name" });
         }
 
         const newBrand = new Brand({
-            category,
+            type,
             brand,
             image,
         });
@@ -43,12 +43,12 @@ const getBrands = async (req, res) => {
 const updateBrands = async (req, res) => {
     try {
         const { id } = req.params;
-        const { category, brand } = req.body;
+        const { type, brand } = req.body;
         const image = req.file ? req.file.filename : undefined;
 
         const updatedBrand = await Brand.findByIdAndUpdate(
             id,
-            { category, brand, ...(image && { image }) },
+            { type, brand, ...(image && { image }) },
             { new: true }
         );
 

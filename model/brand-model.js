@@ -1,7 +1,7 @@
 const mongoose = require("mongoose")
 
 const brandData = new mongoose.Schema({
-    category: { type: String, required: true },
+    type: { type: String, required: true },
     brand: { type: String, required: true },
     image: { type: String }
 })
