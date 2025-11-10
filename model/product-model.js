@@ -16,7 +16,7 @@ const ProductSchema = new mongoose.Schema({
     },
 
     /* ----------------------------------------------------------
-       ✅ NEW STRUCTURE: Color-based image collection
+        NEW STRUCTURE: Color-based image collection
     -----------------------------------------------------------*/
     product_variants: [
         {

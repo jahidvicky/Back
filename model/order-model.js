@@ -189,13 +189,13 @@ const orderSchema = new mongoose.Schema(
     },
     email: { type: String, required: true },
 
-    // ✅ Updated cartItems structure with color variant support
+    //  Updated cartItems structure with color variant support
     cartItems: [
       {
         productId: String,
         name: String,
 
-        // ✅ Images
+        //  Images
         image: String,           // Primary image (first image of selected color)
         variantImages: [String], // All images of that selected color variant
 
@@ -208,7 +208,7 @@ const orderSchema = new mongoose.Schema(
           ref: "Vendor",
         },
 
-        // ✅ Per-item selections
+        //  Per-item selections
         product_size: [String],
         product_color: [String],
         lens: Object,
@@ -221,7 +221,7 @@ const orderSchema = new mongoose.Schema(
           default: "Active",
         },
 
-        // ✅ Policy (insurance) data
+        //  Policy (insurance) data
         policy: {
           policyId: { type: String },
           name: String,
@@ -247,7 +247,7 @@ const orderSchema = new mongoose.Schema(
           },
         },
 
-        // ✅ Stores old policies if renewed
+        //  Stores old policies if renewed
         previousPolicies: [
           {
             name: String,
@@ -267,7 +267,7 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
-    // ✅ Addresses
+    //  Addresses
     shippingAddress: {
       fullName: String,
       address: String,
@@ -294,12 +294,12 @@ const orderSchema = new mongoose.Schema(
     total: Number,
     discount: { type: Number, default: 0 },
 
-    // ✅ Payment
+    //  Payment
     paymentMethod: { type: String, default: "COD" },
     paymentStatus: { type: String, default: "Pending" },
     transactionId: String,
 
-    // ✅ Order Status
+    //  Order Status
     orderStatus: {
       type: String,
       enum: [
@@ -317,7 +317,7 @@ const orderSchema = new mongoose.Schema(
     trackingNumber: String,
     deliveryDate: Date,
 
-    // ✅ Tracking History
+    //  Tracking History
     trackingHistory: [
       {
         status: {

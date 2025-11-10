@@ -120,7 +120,7 @@ exports.createOrder = async (req, res) => {
           };
         }
 
-        // ✅ Pick correct color variant image (new logic)
+        //  Pick correct color variant image (new logic)
         let selectedColor =
           (item.product_color && item.product_color[0]) ||
           item.selectedColor ||
@@ -144,9 +144,9 @@ exports.createOrder = async (req, res) => {
           name: item.name,
           price: item.price,
 
-          // ✅ Prefer color variant image if available
+          //  Prefer color variant image if available
           image: variantImage || item.image,
-          variantImages, // ✅ store all variant images
+          variantImages, //  store all variant images
 
           subCategoryName: item.subCategoryName,
           quantity: item.quantity || 1,

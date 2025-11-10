@@ -1,6 +1,7 @@
 const Product = require("../model/product-model");
 const Category = require("../model/category-model");
 const SubCategory = require("../model/subcategory-model");
+const Brand = require("../model/brand-model");
 const mongoose = require("mongoose");
 
 // Get product by ID
@@ -47,7 +48,8 @@ const getProdcutByCategoryname = async (req, res) => {
         { productStatus: "Approved" },
         { productStatus: { $exists: false } },
       ],
-    });
+    }).populate("brand_id", "brand image type")
+      .lean();
 
     res.json(products);
   } catch (err) {
@@ -64,14 +66,14 @@ const addProduct = async (req, res) => {
     // Convert stock to number
     productData.stockAvailability = Number(productData.stockAvailability) || 0;
 
-    // 🧩 Handle Category
+    //  Handle Category
     const category = await Category.findOne({ categoryName: productData.cat_sec });
     if (!category) {
       return res.status(400).json({ success: false, message: "Category not found" });
     }
     productData.cat_id = category._id;
 
-    // 🧩 Handle SubCategory
+    //  Handle SubCategory
     if (productData.subCategoryName) {
       let subCategory = await SubCategory.findOne({
         subCategoryName: productData.subCategoryName.trim(),
@@ -103,7 +105,7 @@ const addProduct = async (req, res) => {
       }));
     }
 
-    // ✅ Group uploaded files by color fieldname
+    // Group uploaded files by color fieldname
     if (req.files && req.files.length > 0) {
       const fileGroups = {};
 
@@ -159,13 +161,64 @@ const addProduct = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "✅ Product added successfully with color variants",
+      message: "Product added successfully with color variants",
       data: savedProduct,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
       message: "Error while adding product",
+      error: error.message,
+    });
+  }
+};
+
+
+// Get Products by Brand ID
+const getProductsByBrand = async (req, res) => {
+  try {
+    const { brandId } = req.params;
+
+    // 🧠 Validate brand ID
+    if (!brandId) {
+      return res.status(400).json({
+        success: false,
+        message: "Brand ID is required",
+      });
+    }
+
+    //  Find the brand itself
+    const brand = await Brand.findById(brandId);
+    if (!brand) {
+      return res.status(404).json({
+        success: false,
+        message: "Brand not found",
+      });
+    }
+
+    //  Find all products that belong to this brand
+    const products = await Product.find({
+      brand_id: brandId,
+      $or: [
+        { productStatus: "Approved" },
+        { productStatus: { $exists: false } },
+      ],
+    })
+      .populate("brand_id", "brand type image") // attach brand info
+      .sort({ createdAt: -1 }); // latest first
+
+    //  Response
+    res.status(200).json({
+      success: true,
+      brand,
+      totalProducts: products.length,
+      products,
+    });
+  } catch (error) {
+    console.error("Error fetching products by brand:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching products by brand",
       error: error.message,
     });
   }
@@ -365,7 +418,7 @@ const updateProduct = async (req, res) => {
       }));
     }
 
-    // ✅ Merge new uploads
+    //  Merge new uploads
     if (req.files && req.files.length > 0) {
       const fileGroups = {};
 
@@ -408,7 +461,7 @@ const updateProduct = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "✅ Product updated successfully with color variants",
+      message: " Product updated successfully with color variants",
       data: updatedProduct,
     });
   } catch (error) {
@@ -435,7 +488,7 @@ const updateVendorProduct = async (req, res) => {
 
     let updateData = { ...req.body };
 
-    // ✅ Handle color variant updates
+    //  Handle color variant updates
     if (updateData.colorData) {
       const colorArray =
         typeof updateData.colorData === "string"
@@ -448,7 +501,7 @@ const updateVendorProduct = async (req, res) => {
       }));
     }
 
-    // ✅ Handle grouped color uploads (merge all same-color images)
+    //  Handle grouped color uploads (merge all same-color images)
     if (req.files && Object.keys(req.files).length > 0) {
       Object.entries(req.files).forEach(([color, files]) => {
         // Skip if colorName is missing or numeric (like "0", "1")
@@ -720,4 +773,5 @@ module.exports = {
   rejectProduct,
   updateVendorProduct,
   applyVendorDiscount,
+  getProductsByBrand,
 };
