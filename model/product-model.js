@@ -62,7 +62,7 @@ const ProductSchema = new mongoose.Schema({
     product_lens_image2: String,
 
     // Contact lens
-    contact_type: String,
+    lens_type: String,
     material: String,
     manufacturer: String,
     water_content: String,
