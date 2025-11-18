@@ -55,6 +55,10 @@ router.get(
   "/getProductBySubCatId/:subCatId",
   productController.getProductBySubCatId
 );
+router.get(
+  "/getProductByCatId/:catId",
+  productController.getProductByCatId
+);
 
 //  GET PRODUCTS BY CATEGORY AND SUBCATEGORY ID
 router.get(
