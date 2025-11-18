@@ -40,18 +40,17 @@ const uploadRoutes = require("./routes/uploadRoutes");
 const discountRoutes = require("./routes/discount-routes");
 const brandRoutes = require("./routes/brand-routes");
 
-require("./corn/PolicyExpiryJob"); // 🕒 Cron job
+require("./corn/PolicyExpiryJob"); // Cron job
 
 const app = express();
 
 // -------------------- CORS SETUP --------------------
 const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  "http://127.0.0.1:5173",
-  // "https://ataloptical.org",
-  // "https://www.ataloptical.org",
-  // "https://dashboard.ataloptical.org"
+  // "http://localhost:5173",
+  // "http://localhost:5174",
+  "https://ataloptical.org",
+  "https://www.ataloptical.org",
+  "https://dashboard.ataloptical.org"
 ];
 
 app.use(
