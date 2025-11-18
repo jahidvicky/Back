@@ -685,6 +685,41 @@ const getProductBySubCatId = async (req, res) => {
   }
 };
 
+const getProductByCatId = async (req, res) => {
+  try {
+    const { catId } = req.params;
+
+    if (!catId) {
+      return res.status(400).json({
+        success: false,
+        message: "Category ID is required",
+      });
+    }
+
+    const products = await Product.find({
+      cat_id: catId,
+      $or: [
+        { productStatus: "Approved" },
+        { productStatus: { $exists: false } },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      count: products.length,
+      data: products,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching products",
+      error: error.message,
+    });
+  }
+};
+
+
 const applyVendorDiscount = async (req, res) => {
   try {
     const { productId } = req.params;
@@ -850,5 +885,6 @@ module.exports = {
   applyVendorDiscount,
   getProductsByBrandId,
   getBestSellerProducts,
-  getTrendingProducts
+  getTrendingProducts,
+  getProductByCatId
 };
