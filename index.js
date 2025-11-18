@@ -46,11 +46,11 @@ const app = express();
 
 // -------------------- CORS SETUP --------------------
 const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5174",
-  // "https://ataloptical.org",
-  // "https://www.ataloptical.org",
-  // "https://dashboard.ataloptical.org"
+  // "http://localhost:5173",
+  // "http://localhost:5174",
+  "https://ataloptical.org",
+  "https://www.ataloptical.org",
+  "https://dashboard.ataloptical.org"
 ];
 
 app.use(
