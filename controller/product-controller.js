@@ -58,119 +58,91 @@ const getProdcutByCategoryname = async (req, res) => {
 };
 
 // ----------------------------
-// Add Product (with color variants)
+// Add Product (FIXED VERSION)
+// ----------------------------
 const addProduct = async (req, res) => {
   try {
     const productData = { ...req.body };
 
-    // Convert stock to number
-    productData.stockAvailability = Number(productData.stockAvailability) || 0;
+    /* ---------------- STOCK ---------------- */
+    productData.stockAvailability =
+      Number(productData.stockAvailability) || 0;
 
-    /* -----------------------------------------
-       CATEGORY HANDLING
-    ------------------------------------------ */
+    /* ---------------- CATEGORY ---------------- */
     const category = await Category.findById(productData.cat_id);
-    if (!category) {
-      return res.status(400).json({
-        success: false,
-        message: "Category not found",
-      });
-    }
+    if (!category)
+      return res.status(400).json({ success: false, message: "Category not found" });
 
     productData.cat_sec = category.categoryName;
 
-    /* -----------------------------------------
-       SUBCATEGORY HANDLING (FIXED)
-       ✔ DO NOT CREATE NEW SUBCATEGORY
-       ✔ USE EXISTING subCat_id
-    ------------------------------------------ */
+    /* ---------------- SUB CATEGORY ---------------- */
     if (productData.subCat_id) {
-      const subCategory = await SubCategory.findById(productData.subCat_id);
+      const sub = await SubCategory.findById(productData.subCat_id);
+      if (!sub)
+        return res.status(400).json({ success: false, message: "Invalid subcategory" });
 
-      if (!subCategory) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid subcategory selected",
-        });
-      }
-
-      productData.subCategoryName = subCategory.name; // sync properly
+      productData.subCategoryName = sub.name;
     } else {
       productData.subCategoryName = "";
     }
 
-    /* -----------------------------------------
-       COLOR VARIANTS INIT
-    ------------------------------------------ */
+    /* ---------------- COLOR VARIANTS ---------------- */
     productData.product_variants = [];
 
-    // Parse existing colorData
     if (productData.colorData) {
-      const colorArray =
-        typeof productData.colorData === "string"
-          ? JSON.parse(productData.colorData)
-          : productData.colorData;
+      const colorArray = JSON.parse(productData.colorData);
 
-      productData.product_variants = colorArray.map((variant) => ({
-        colorName: variant.colorName.trim().toLowerCase(),
-        images: variant.images || [],
+      productData.product_variants = colorArray.map((cv) => ({
+        colorName: cv.colorName.trim().toLowerCase(),
+        images: cv.images || [],
       }));
     }
 
-    /* -----------------------------------------
-       HANDLE UPLOADED FILES
-    ------------------------------------------ */
+    /* ---------------- FILE UPLOADS ---------------- */
+    const lensFields = ["product_lens_image1", "product_lens_image2"];
+    const grouped = {};
+
     if (req.files && req.files.length > 0) {
-      const grouped = {};
-
       req.files.forEach((file) => {
-        const color = file.fieldname.trim().toLowerCase();
-        if (!color || !isNaN(color)) return;
+        const fieldName = file.fieldname.trim().toLowerCase();
 
-        if (!grouped[color]) grouped[color] = [];
-        grouped[color].push(file.filename);
+        // If lens image → handle separately later
+        if (lensFields.includes(fieldName)) return;
+
+        // Skip numeric/invalid fields
+        if (!fieldName || !isNaN(fieldName)) return;
+
+        if (!grouped[fieldName]) grouped[fieldName] = [];
+        grouped[fieldName].push(file.filename);
       });
+    }
 
-      Object.entries(grouped).forEach(([colorName, images]) => {
-        const existing = productData.product_variants.find(
-          (v) => v.colorName === colorName
-        );
+    /* ---------------- MERGE VARIANTS ---------------- */
+    Object.entries(grouped).forEach(([color, images]) => {
+      const existing = productData.product_variants.find(
+        (v) => v.colorName === color
+      );
 
-        if (existing) {
-          existing.images.push(...images);
-        } else {
-          productData.product_variants.push({
-            colorName,
-            images,
-          });
+      if (existing) {
+        existing.images.push(...images);
+      } else {
+        productData.product_variants.push({ colorName: color, images });
+      }
+    });
+
+    /* ---------------- LENS IMAGES ---------------- */
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        if (file.fieldname === "product_lens_image1") {
+          productData.product_lens_image1 = file.filename;
+        }
+        if (file.fieldname === "product_lens_image2") {
+          productData.product_lens_image2 = file.filename;
         }
       });
     }
 
-    /* -----------------------------------------
-       HANDLE LENS IMAGES
-    ------------------------------------------ */
-    if (
-      req.files &&
-      req.files.product_lens_image1 &&
-      req.files.product_lens_image1[0]
-    ) {
-      productData.product_lens_image1 =
-        req.files.product_lens_image1[0].filename;
-    }
-
-    if (
-      req.files &&
-      req.files.product_lens_image2 &&
-      req.files.product_lens_image2[0]
-    ) {
-      productData.product_lens_image2 =
-        req.files.product_lens_image2[0].filename;
-    }
-
-    /* -----------------------------------------
-       ROLE-BASED LOGIC
-    ------------------------------------------ */
+    /* ---------------- ROLE HANDLING ---------------- */
     const now = new Date();
 
     if (req.user.role === "admin") {
@@ -178,40 +150,33 @@ const addProduct = async (req, res) => {
       productData.isSentForApproval = true;
       productData.approvedBy = req.user.name;
       productData.approvedDate = now;
-      productData.createdBy = req.user.role;
-    } else if (req.user.role === "vendor") {
+      productData.createdBy = "admin";
+    } else {
       productData.vendorID = req.user.id;
       productData.productStatus = "Pending";
       productData.isSentForApproval = false;
-      productData.createdBy = req.user.role;
-    } else {
-      return res.status(403).json({
-        success: false,
-        message: "Unauthorized role",
-      });
+      productData.createdBy = "vendor";
     }
 
-    /* -----------------------------------------
-       CREATE PRODUCT
-    ------------------------------------------ */
-    const product = new Product(productData);
-    const savedProduct = await product.save();
+    /* ---------------- SAVE ---------------- */
+    const saved = await new Product(productData).save();
 
     return res.status(201).json({
       success: true,
-      message: "Product added successfully with color variants",
-      data: savedProduct,
+      message: "Product added successfully",
+      data: saved,
     });
 
-  } catch (error) {
-    console.error("ADD PRODUCT ERROR:", error);
+  } catch (err) {
+    console.error("ADD PRODUCT ERROR:", err);
     return res.status(500).json({
       success: false,
       message: "Error while adding product",
-      error: error.message,
+      error: err.message,
     });
   }
 };
+
 
 
 
@@ -387,75 +352,85 @@ const rejectProduct = async (req, res) => {
 };
 
 // ----------------------------
-// Update Product (Admin)
+// Update Product (FIXED VERSION)
 // ----------------------------
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
     let updateData = { ...req.body };
 
-    // Parse colorData
-    let updatedVariants = [];
-    if (updateData.colorData) {
-      const colorArray =
-        typeof updateData.colorData === "string"
-          ? JSON.parse(updateData.colorData)
-          : updateData.colorData;
+    /* -------- COLOR DATA -------- */
+    let variants = [];
 
-      updatedVariants = colorArray.map((variant) => ({
-        colorName: variant.colorName.trim().toLowerCase(),
-        images: variant.images || [],
+    if (updateData.colorData) {
+      const colorArray = JSON.parse(updateData.colorData);
+
+      variants = colorArray.map((cv) => ({
+        colorName: cv.colorName.trim().toLowerCase(),
+        images: cv.images || [],
       }));
     }
 
-    //  Merge new uploads
+    /* -------- GROUP FILES -------- */
+    const lensFields = ["product_lens_image1", "product_lens_image2"];
+    const grouped = {};
+
     if (req.files && req.files.length > 0) {
-      const fileGroups = {};
-
       req.files.forEach((file) => {
-        const color = file.fieldname.trim().toLowerCase();
-        if (!color || !isNaN(color)) return;
+        const fieldName = file.fieldname.trim().toLowerCase();
 
-        if (!fileGroups[color]) fileGroups[color] = [];
-        fileGroups[color].push(file.filename);
+        if (lensFields.includes(fieldName)) return;
+        if (!fieldName || !isNaN(fieldName)) return;
+
+        if (!grouped[fieldName]) grouped[fieldName] = [];
+        grouped[fieldName].push(file.filename);
       });
+    }
 
-      Object.entries(fileGroups).forEach(([color, imageFiles]) => {
-        const existingVariant = updatedVariants.find(
-          (v) => v.colorName === color
-        );
+    /* -------- MERGE NEW IMAGES -------- */
+    Object.entries(grouped).forEach(([color, images]) => {
+      const existing = variants.find((v) => v.colorName === color);
 
-        if (existingVariant) {
-          existingVariant.images = [
-            ...(existingVariant.images || []),
-            ...imageFiles,
-          ];
-        } else {
-          updatedVariants.push({
-            colorName: color,
-            images: imageFiles,
-          });
+      if (existing) {
+        existing.images.push(...images);
+      } else {
+        variants.push({ colorName: color, images });
+      }
+    });
+
+    updateData.product_variants = variants;
+
+    /* -------- LENS IMAGES -------- */
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        if (file.fieldname === "product_lens_image1") {
+          updateData.product_lens_image1 = file.filename;
+        }
+        if (file.fieldname === "product_lens_image2") {
+          updateData.product_lens_image2 = file.filename;
         }
       });
     }
 
-    updateData.product_variants = updatedVariants;
-
+    /* -------- UPDATE PRODUCT -------- */
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
     });
 
-    if (!updatedProduct)
+    if (!updatedProduct) {
       return res.status(404).json({ success: false, message: "Product not found" });
+    }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: " Product updated successfully with color variants",
+      message: "Product updated successfully",
       data: updatedProduct,
     });
+
   } catch (error) {
-    res.status(500).json({
+    console.error("UPDATE PRODUCT ERROR:", error);
+    return res.status(500).json({
       success: false,
       message: "Error while updating product",
       error: error.message,
@@ -466,70 +441,85 @@ const updateProduct = async (req, res) => {
 
 
 // ----------------------------
-// Update Product (Vendor)
+// Update Product (Vendor) - FIXED
 // ----------------------------
 const updateVendorProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const existingProduct = await Product.findById(id);
-    if (!existingProduct) {
+
+    const existing = await Product.findById(id);
+    if (!existing)
       return res.status(404).json({ success: false, message: "Product not found" });
-    }
 
     let updateData = { ...req.body };
 
-    //  Handle color variant updates
-    if (updateData.colorData) {
-      const colorArray =
-        typeof updateData.colorData === "string"
-          ? JSON.parse(updateData.colorData)
-          : updateData.colorData;
+    /* -------- COLOR VARIANTS -------- */
+    let variants = [];
 
-      updateData.product_variants = colorArray.map((variant) => ({
-        colorName: variant.colorName,
-        images: variant.images || [],
+    if (updateData.colorData) {
+      const colorArray = JSON.parse(updateData.colorData);
+
+      variants = colorArray.map((cv) => ({
+        colorName: cv.colorName.trim().toLowerCase(),
+        images: cv.images || [],
       }));
     }
 
-    //  Handle grouped color uploads (merge all same-color images)
-    if (req.files && Object.keys(req.files).length > 0) {
-      Object.entries(req.files).forEach(([color, files]) => {
-        // Skip if colorName is missing or numeric (like "0", "1")
-        if (!color.trim() || !isNaN(color)) return;
+    /* -------- GROUP FILES -------- */
+    const fileGroups = {};
 
-        const safeFiles = Array.isArray(files) ? files : [files];
-        const newImages = safeFiles.map((f) => f.filename);
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        const field = file.fieldname.trim().toLowerCase();
 
-        // Find if this color already exists
-        const existingVariant = updateData.product_variants.find(
-          (v) => v.colorName.toLowerCase() === color.toLowerCase()
-        );
+        if (field === "product_lens_image1" || field === "product_lens_image2")
+          return;
 
-        if (existingVariant) {
-          existingVariant.images = [...(existingVariant.images || []), ...newImages];
-        } else {
-          updateData.product_variants.push({
-            colorName: color.trim(),
-            images: newImages,
-          });
+        if (!field || !isNaN(field)) return;
+
+        if (!fileGroups[field]) fileGroups[field] = [];
+
+        fileGroups[field].push(file.filename);
+      });
+    }
+
+    /* -------- MERGE FILES INTO VARIANTS -------- */
+    Object.entries(fileGroups).forEach(([colorName, images]) => {
+      let existingVariant = variants.find((v) => v.colorName === colorName);
+
+      if (existingVariant) {
+        existingVariant.images.push(...images);
+      } else {
+        variants.push({ colorName, images });
+      }
+    });
+
+    updateData.product_variants = variants;
+
+    /* -------- LENS IMAGES -------- */
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        if (file.fieldname === "product_lens_image1") {
+          updateData.product_lens_image1 = file.filename;
+        }
+        if (file.fieldname === "product_lens_image2") {
+          updateData.product_lens_image2 = file.filename;
         }
       });
     }
 
-
-    // Stock normalization
-    if (
-      updateData.stockAvailability !== undefined &&
-      updateData.stockAvailability !== null
-    ) {
+    /* -------- STOCK -------- */
+    if (updateData.stockAvailability !== undefined) {
       const val = Array.isArray(updateData.stockAvailability)
         ? updateData.stockAvailability[0]
         : updateData.stockAvailability;
+
       updateData.stockAvailability = Number(val);
     } else {
-      updateData.stockAvailability = existingProduct.stockAvailability;
+      updateData.stockAvailability = existing.stockAvailability;
     }
 
+    /* -------- UPDATE -------- */
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
@@ -537,9 +527,10 @@ const updateVendorProduct = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: "Vendor product updated successfully with color variants",
+      message: "Vendor product updated successfully",
       data: updatedProduct,
     });
+
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -548,6 +539,7 @@ const updateVendorProduct = async (req, res) => {
     });
   }
 };
+
 
 
 
