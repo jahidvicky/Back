@@ -46,11 +46,11 @@ const app = express();
 
 // -------------------- CORS SETUP --------------------
 const allowedOrigins = [
-  // "http://localhost:5173",
-  // "http://localhost:5174",
-  "https://ataloptical.org",
-  "https://www.ataloptical.org",
-  "https://dashboard.ataloptical.org"
+  "http://localhost:5173",
+  "http://localhost:5174",
+  // "https://ataloptical.org",
+  // "https://www.ataloptical.org",
+  // "https://dashboard.ataloptical.org"
 ];
 
 app.use(
@@ -131,13 +131,13 @@ mongoose
   .then(async () => {
     await mongoose.connection.asPromise();
     const dbName = mongoose.connection.db.databaseName;
-    console.log(`✅ Connected to MongoDB Database: ${dbName}`);
+    console.log(`Connected to MongoDB Database: ${dbName}`);
     console.log("DB Connected Successfully");
 
     app.listen(PORT, () => {
-      console.log(`🚀 Server started on Port: ${PORT}`);
+      console.log(`Server started on Port: ${PORT}`);
     });
   })
   .catch((err) => {
-    console.error("❌ MongoDB connection error:", err.message);
+    console.error("MongoDB connection error:", err.message);
   });
