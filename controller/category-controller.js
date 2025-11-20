@@ -159,7 +159,7 @@ exports.updateCategory = async (req, res) => {
     }
 
     // -------------------------------
-    // ⭐ UPDATE BASIC FIELDS
+    //  UPDATE BASIC FIELDS
     // -------------------------------
     if (categoryName) category.categoryName = categoryName.trim();
 
@@ -170,7 +170,7 @@ exports.updateCategory = async (req, res) => {
     }
 
     // -------------------------------
-    // ⭐ IMAGE HANDLING (3 CASES)
+    //  IMAGE HANDLING (3 CASES)
     // -------------------------------
 
     // CASE 1: User removed old image & no new image uploaded
