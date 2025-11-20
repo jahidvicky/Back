@@ -13,7 +13,7 @@ exports.handlePayPalWebhook = async (req, res) => {
         const authAlgo = req.header("paypal-auth-algo");
         const transmissionSig = req.header("paypal-transmission-sig");
 
-        // 🔹 Verify webhook signature with PayPal API
+        //  Verify webhook signature with PayPal API
         const { data } = await axios.post(
             `${process.env.PAYPAL_API}/v1/notifications/verify-webhook-signature`,
             {

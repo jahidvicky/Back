@@ -305,7 +305,7 @@ const sendApprovedProduct = async (req, res) => {
   try {
     const product = await Product.findByIdAndUpdate(
       req.params.productId,
-      { productStatus: "Approved" }, //  use the correct field name
+      { productStatus: "Approved" },
       { new: true }
     );
 

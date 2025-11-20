@@ -35,7 +35,7 @@ exports.addsubcategory = async (req, res) => {
       });
     }
 
-    const image = getImagePath(req.file); // 🔥 FIX
+    const image = getImagePath(req.file); // FIX
 
     const subCategoryData = {
       category,
@@ -201,14 +201,14 @@ exports.updateSubcategory = async (req, res) => {
     }
 
     // -------------------------------
-    // ⭐ UPDATE BASIC FIELDS
+    //  UPDATE BASIC FIELDS
     // -------------------------------
     subcategory.category = categoryDoc._id;
     subcategory.name = subCategoryName;
     subcategory.description = description;
 
     // -------------------------------
-    // ⭐ IMAGE HANDLING
+    //  IMAGE HANDLING
     // -------------------------------
 
     // CASE 1: User removed old image and no new image uploaded

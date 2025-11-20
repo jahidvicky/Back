@@ -54,51 +54,6 @@ exports.createOrder = async (req, res) => {
     const orderDate = new Date();
     const trackingNumber = generateTrackingNumber();
 
-    // const cartItemsWithDetails = await Promise.all(
-    //   cartItems.map(async (item) => {
-    //     const product = await productModel.findById(item.id || item.productId);
-
-    //     let updatedPolicy = null;
-    //     if (item.policy) {
-    //       const expiryDate = dayjs(orderDate)
-    //         .add(item.policy.durationDays, "day")
-    //         .toDate();
-
-    //       updatedPolicy = {
-    //         ...item.policy,
-    //         purchasedAt: orderDate,
-    //         expiryDate,
-    //         status: "Active",
-    //         active: true,
-    //         expired: false,
-    //       };
-    //     }
-
-    //     return {
-    //       productId: item.id || item.productId,
-    //       name: item.name,
-    //       price: item.price,
-    //       image: item.image,
-    //       subCategoryName: item.subCategoryName,
-    //       quantity: item.quantity || 1,
-    //       createdBy: product?.createdBy || "admin",
-    //       vendorID:
-    //         item.vendorID ||
-    //         item.vendorId ||
-    //         null,
-
-    //       product_size: item.product_size || [],
-    //       product_color: item.product_color || [],
-    //       lens: item.lens || null,
-    //       enhancement: item.enhancement || null,
-    //       thickness: item.thickness || null,
-    //       tint: item.tint || null,
-
-    //       policy: updatedPolicy,
-    //     };
-    //   })
-    // );
-
 
     const cartItemsWithDetails = await Promise.all(
       cartItems.map(async (item) => {
