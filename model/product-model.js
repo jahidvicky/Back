@@ -66,6 +66,15 @@ const ProductSchema = new mongoose.Schema({
     material: String,
     manufacturer: String,
     water_content: String,
+    contactLens_packs: [
+        {
+            packSize: { type: Number, required: true },
+            oldPrice: { type: Number, required: true },
+            salePrice: { type: Number, required: true },
+            isBestValue: { type: Boolean, default: false }
+        }
+    ],
+
 
     // Vendor reference
     vendorID: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
