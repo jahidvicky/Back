@@ -59,10 +59,19 @@ const getProdcutByCategoryname = async (req, res) => {
 
 // ----------------------------
 // Add Product (FIXED VERSION)
-// ----------------------------
 const addProduct = async (req, res) => {
   try {
     const productData = { ...req.body };
+
+    /* ---------------- CONTACT LENS PACKS ---------------- */
+    if (productData.contactLens_packs) {
+      try {
+        productData.contactLens_packs = JSON.parse(productData.contactLens_packs);
+      } catch (e) {
+        console.error("PACK PARSE ERROR:", e);
+        productData.contactLens_packs = [];
+      }
+    }
 
     /* ---------------- STOCK ---------------- */
     productData.stockAvailability =
@@ -106,10 +115,7 @@ const addProduct = async (req, res) => {
       req.files.forEach((file) => {
         const fieldName = file.fieldname.trim().toLowerCase();
 
-        // If lens image → handle separately later
         if (lensFields.includes(fieldName)) return;
-
-        // Skip numeric/invalid fields
         if (!fieldName || !isNaN(fieldName)) return;
 
         if (!grouped[fieldName]) grouped[fieldName] = [];
@@ -176,7 +182,6 @@ const addProduct = async (req, res) => {
     });
   }
 };
-
 
 
 
@@ -359,6 +364,15 @@ const updateProduct = async (req, res) => {
     const { id } = req.params;
     let updateData = { ...req.body };
 
+    /* ---------------- CONTACT LENS PACKS ---------------- */
+    if (updateData.contactLens_packs) {
+      try {
+        updateData.contactLens_packs = JSON.parse(updateData.contactLens_packs);
+      } catch (e) {
+        updateData.contactLens_packs = [];
+      }
+    }
+
     /* -------- COLOR DATA -------- */
     let variants = [];
 
@@ -440,6 +454,7 @@ const updateProduct = async (req, res) => {
 
 
 
+
 // ----------------------------
 // Update Product (Vendor) - FIXED
 // ----------------------------
@@ -452,6 +467,15 @@ const updateVendorProduct = async (req, res) => {
       return res.status(404).json({ success: false, message: "Product not found" });
 
     let updateData = { ...req.body };
+
+    /* ---------------- CONTACT LENS PACKS ---------------- */
+    if (updateData.contactLens_packs) {
+      try {
+        updateData.contactLens_packs = JSON.parse(updateData.contactLens_packs);
+      } catch (e) {
+        updateData.contactLens_packs = [];
+      }
+    }
 
     /* -------- COLOR VARIANTS -------- */
     let variants = [];
@@ -483,7 +507,7 @@ const updateVendorProduct = async (req, res) => {
       });
     }
 
-    /* -------- MERGE FILES INTO VARIANTS -------- */
+    /* -------- MERGE FILES -------- */
     Object.entries(fileGroups).forEach(([colorName, images]) => {
       let existingVariant = variants.find((v) => v.colorName === colorName);
 
