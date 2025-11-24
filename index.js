@@ -73,9 +73,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // -------------------- STATIC FILES --------------------
-app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
-app.use(express.static('public'));
-app.use("/uploads", express.static("uploads"));
+app.use("/uploads", express.static(path.join(__dirname, "uploads"), {
+  setHeaders: (res, filePath) => {
+    if (filePath.toLowerCase().endsWith(".avif")) {
+      res.setHeader("Content-Type", "image/avif");
+    }
+    if (filePath.toLowerCase().endsWith(".webp")) {
+      res.setHeader("Content-Type", "image/webp");
+    }
+  }
+}));
+
 
 // -------------------- BASIC ROUTE --------------------
 app.get("/", (req, res) => {

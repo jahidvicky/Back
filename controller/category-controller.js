@@ -173,30 +173,29 @@ exports.updateCategory = async (req, res) => {
     //  IMAGE HANDLING (3 CASES)
     // -------------------------------
 
-    // CASE 1: User removed old image & no new image uploaded
+    // CASE 1: If user clicked remove → delete image
     if (oldImage === "" && !req.file) {
-
       if (category.categoryImage) {
         const filePath = path.join("uploads", category.categoryImage);
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
-
       category.categoryImage = "";
     }
 
     // CASE 2: User uploaded a NEW image
-    if (req.file) {
-      // delete old
+    else if (req.file) {
       if (category.categoryImage) {
         const filePath = path.join("uploads", category.categoryImage);
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
-
-      // save new image
       category.categoryImage = getImagePath(req.file);
     }
 
-    // CASE 3: User kept old image → do nothing
+    // CASE 3: User kept old image → KEEP the old one
+    else {
+      category.categoryImage = category.categoryImage;
+    }
+
 
     // Save changes
     await category.save();
