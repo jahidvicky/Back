@@ -23,13 +23,11 @@ const getProductById = async (req, res) => {
     }
     res.status(200).json({ success: true, product });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching product",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching product",
+      error: error.message,
+    });
   }
 };
 
@@ -48,7 +46,8 @@ const getProdcutByCategoryname = async (req, res) => {
         { productStatus: "Approved" },
         { productStatus: { $exists: false } },
       ],
-    }).populate("brand_id", "brand image type")
+    })
+      .populate("brand_id", "brand image type")
       .lean();
 
     res.json(products);
@@ -59,6 +58,7 @@ const getProdcutByCategoryname = async (req, res) => {
 
 // ----------------------------
 // Add Product (FIXED VERSION)
+// ----------------------------
 const addProduct = async (req, res) => {
   try {
     const productData = { ...req.body };
@@ -66,7 +66,9 @@ const addProduct = async (req, res) => {
     /* ---------------- CONTACT LENS PACKS ---------------- */
     if (productData.contactLens_packs) {
       try {
-        productData.contactLens_packs = JSON.parse(productData.contactLens_packs);
+        productData.contactLens_packs = JSON.parse(
+          productData.contactLens_packs
+        );
       } catch (e) {
         console.error("PACK PARSE ERROR:", e);
         productData.contactLens_packs = [];
@@ -80,7 +82,9 @@ const addProduct = async (req, res) => {
     /* ---------------- CATEGORY ---------------- */
     const category = await Category.findById(productData.cat_id);
     if (!category)
-      return res.status(400).json({ success: false, message: "Category not found" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Category not found" });
 
     productData.cat_sec = category.categoryName;
 
@@ -88,7 +92,9 @@ const addProduct = async (req, res) => {
     if (productData.subCat_id) {
       const sub = await SubCategory.findById(productData.subCat_id);
       if (!sub)
-        return res.status(400).json({ success: false, message: "Invalid subcategory" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid subcategory" });
 
       productData.subCategoryName = sub.name;
     } else {
@@ -162,6 +168,7 @@ const addProduct = async (req, res) => {
       productData.productStatus = "Pending";
       productData.isSentForApproval = false;
       productData.createdBy = "vendor";
+      productData.isResubmitted = false;
     }
 
     /* ---------------- SAVE ---------------- */
@@ -172,7 +179,6 @@ const addProduct = async (req, res) => {
       message: "Product added successfully",
       data: saved,
     });
-
   } catch (err) {
     console.error("ADD PRODUCT ERROR:", err);
     return res.status(500).json({
@@ -182,10 +188,6 @@ const addProduct = async (req, res) => {
     });
   }
 };
-
-
-
-
 
 const getAllProducts = async (req, res) => {
   try {
@@ -197,7 +199,7 @@ const getAllProducts = async (req, res) => {
       query.$or = [
         { product_name: { $regex: search, $options: "i" } },
         { product_description: { $regex: search, $options: "i" } },
-        { product_frame_material: { $regex: search, $options: "i" } },
+        { frame_material: { $regex: search, $options: "i" } },
       ];
     }
 
@@ -205,14 +207,20 @@ const getAllProducts = async (req, res) => {
     if (category) query.cat_sec = category;
     if (subCategory) query.subCategoryName = subCategory;
 
-    // Status filter (merge with query)
-    query.$or = query.$or
-      ? [
-        ...query.$or,
+    // Status filter (AND with others)
+    const statusFilter = {
+      $or: [
         { productStatus: "Approved" },
         { productStatus: { $exists: false } },
-      ]
-      : [{ productStatus: "Approved" }, { productStatus: { $exists: false } }];
+      ],
+    };
+
+    // Combine search/category filters and status filter
+    if (Object.keys(query).length > 0) {
+      query = { $and: [query, statusFilter] };
+    } else {
+      query = statusFilter;
+    }
 
     // Final query
     const products = await Product.find(query).sort({ createdAt: -1 });
@@ -279,23 +287,47 @@ const sendProductForApproval = async (req, res) => {
   const { productId } = req.params;
 
   try {
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { isSentForApproval: true },
-      { new: true }
-    );
+    const product = await Product.findById(productId);
 
-    if (!updatedProduct) {
+    if (!product) {
       return res.status(404).json({
         success: false,
         message: "Product not found",
       });
     }
 
+    // If already approved, no need to send again
+    if (product.productStatus === "Approved") {
+      return res.status(400).json({
+        success: false,
+        message: "Product is already approved.",
+      });
+    }
+
+    // If already sent and not rejected, do nothing
+    if (product.isSentForApproval && product.productStatus !== "Rejected") {
+      return res.status(400).json({
+        success: false,
+        message: "Product is already sent for approval.",
+      });
+    }
+
+    // If rejected → treat as resubmission
+    if (product.productStatus === "Rejected") {
+      product.isResubmitted = true;
+      product.rejectionReason = undefined;
+    }
+
+    product.productStatus = "Pending";
+    product.isSentForApproval = true;
+    product.sentApprovalDate = new Date();
+
+    await product.save();
+
     return res.status(200).json({
       success: true,
       message: "Product sent for approval",
-      product: updatedProduct,
+      product,
     });
   } catch (err) {
     console.error(err);
@@ -308,18 +340,26 @@ const sendProductForApproval = async (req, res) => {
 
 const sendApprovedProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(
-      req.params.productId,
-      { productStatus: "Approved" },
-      { new: true }
-    );
+    const product = await Product.findById(req.params.productId);
 
     if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found",
-      });
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
+
+    product.productStatus = "Approved";
+    product.isSentForApproval = false;
+    product.isResubmitted = false;
+    product.approvedBy = req.user?.name;
+    product.approvedDate = new Date();
+
+    // Push approval history
+    product.approvalHistory.push({
+      status: "Approved",
+      updatedAt: new Date(),
+      reason: "Approved by admin"
+    });
+
+    await product.save();
 
     res.status(200).json({
       success: true,
@@ -335,29 +375,36 @@ const sendApprovedProduct = async (req, res) => {
   }
 };
 
+
 const rejectProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(
-      req.params.id,
-      {
-        productStatus: "Rejected",
-        rejectionReason: req.body.message,
-      },
-      { new: true }
-    );
+    const product = await Product.findById(req.params.id);
     if (!product) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found" });
+      return res.status(404).json({ success: false, message: "Product not found" });
     }
+
+    product.productStatus = "Rejected";
+    product.rejectionReason = req.body.message;
+    product.isSentForApproval = false;
+
+    // Push rejection history
+    product.approvalHistory.push({
+      status: "Rejected",
+      updatedAt: new Date(),
+      reason: req.body.message,
+    });
+
+    await product.save();
+
     res.json({ success: true, message: "Product rejected", product });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error", error });
   }
 };
 
+
 // ----------------------------
-// Update Product (FIXED VERSION)
+// Update Product (Admin) - FIXED VERSION
 // ----------------------------
 const updateProduct = async (req, res) => {
   try {
@@ -367,7 +414,9 @@ const updateProduct = async (req, res) => {
     /* ---------------- CONTACT LENS PACKS ---------------- */
     if (updateData.contactLens_packs) {
       try {
-        updateData.contactLens_packs = JSON.parse(updateData.contactLens_packs);
+        updateData.contactLens_packs = JSON.parse(
+          updateData.contactLens_packs
+        );
       } catch (e) {
         updateData.contactLens_packs = [];
       }
@@ -426,6 +475,11 @@ const updateProduct = async (req, res) => {
       });
     }
 
+    // numeric stock
+    if (updateData.stockAvailability !== undefined) {
+      updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
+    }
+
     /* -------- UPDATE PRODUCT -------- */
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
@@ -433,7 +487,9 @@ const updateProduct = async (req, res) => {
     });
 
     if (!updatedProduct) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
     }
 
     return res.status(200).json({
@@ -441,7 +497,6 @@ const updateProduct = async (req, res) => {
       message: "Product updated successfully",
       data: updatedProduct,
     });
-
   } catch (error) {
     console.error("UPDATE PRODUCT ERROR:", error);
     return res.status(500).json({
@@ -452,32 +507,61 @@ const updateProduct = async (req, res) => {
   }
 };
 
-
-
-
 // ----------------------------
-// Update Product (Vendor) - FIXED
+// Update Product (Vendor) - FULL + RESTRICTED
 // ----------------------------
 const updateVendorProduct = async (req, res) => {
   try {
     const { id } = req.params;
 
     const existing = await Product.findById(id);
-    if (!existing)
-      return res.status(404).json({ success: false, message: "Product not found" });
+    if (!existing) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
+    }
+
+    // Only owner vendor can update (if you want this)
+    if (
+      req.user.role === "vendor" &&
+      existing.vendorID?.toString() !== req.user.id.toString()
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to update this product",
+      });
+    }
 
     let updateData = { ...req.body };
+    const status = existing.productStatus;
 
-    /* ---------------- CONTACT LENS PACKS ---------------- */
+    /* ------------------------------------------------
+      Restrict editing when product is sent for approval
+    ------------------------------------------------ */
+    if (existing.isSentForApproval && status !== "Rejected") {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Cannot edit product while it is sent for approval. Wait for admin to approve or reject.",
+      });
+    }
+
+    /* ------------------------------------------------
+      CONTACT LENS PACKS
+    ------------------------------------------------ */
     if (updateData.contactLens_packs) {
       try {
-        updateData.contactLens_packs = JSON.parse(updateData.contactLens_packs);
+        updateData.contactLens_packs = JSON.parse(
+          updateData.contactLens_packs
+        );
       } catch (e) {
         updateData.contactLens_packs = [];
       }
     }
 
-    /* -------- COLOR VARIANTS -------- */
+    /* ------------------------------------------------
+      COLOR DATA & VARIANTS
+    ------------------------------------------------ */
     let variants = [];
 
     if (updateData.colorData) {
@@ -489,38 +573,37 @@ const updateVendorProduct = async (req, res) => {
       }));
     }
 
-    /* -------- GROUP FILES -------- */
-    const fileGroups = {};
+    const lensFields = ["product_lens_image1", "product_lens_image2"];
+    const grouped = {};
 
     if (req.files && req.files.length > 0) {
       req.files.forEach((file) => {
-        const field = file.fieldname.trim().toLowerCase();
+        const fieldName = file.fieldname.trim().toLowerCase();
 
-        if (field === "product_lens_image1" || field === "product_lens_image2")
-          return;
+        if (lensFields.includes(fieldName)) return;
+        if (!fieldName || !isNaN(fieldName)) return;
 
-        if (!field || !isNaN(field)) return;
-
-        if (!fileGroups[field]) fileGroups[field] = [];
-
-        fileGroups[field].push(file.filename);
+        if (!grouped[fieldName]) grouped[fieldName] = [];
+        grouped[fieldName].push(file.filename);
       });
     }
 
-    /* -------- MERGE FILES -------- */
-    Object.entries(fileGroups).forEach(([colorName, images]) => {
-      let existingVariant = variants.find((v) => v.colorName === colorName);
+    // Merge new images into variants
+    Object.entries(grouped).forEach(([color, images]) => {
+      const existingVariant = variants.find((v) => v.colorName === color);
 
       if (existingVariant) {
         existingVariant.images.push(...images);
       } else {
-        variants.push({ colorName, images });
+        variants.push({ colorName: color, images });
       }
     });
 
     updateData.product_variants = variants;
 
-    /* -------- LENS IMAGES -------- */
+    /* ------------------------------------------------
+      LENS IMAGES
+    ------------------------------------------------ */
     if (req.files && req.files.length > 0) {
       req.files.forEach((file) => {
         if (file.fieldname === "product_lens_image1") {
@@ -532,18 +615,65 @@ const updateVendorProduct = async (req, res) => {
       });
     }
 
-    /* -------- STOCK -------- */
-    if (updateData.stockAvailability !== undefined) {
-      const val = Array.isArray(updateData.stockAvailability)
-        ? updateData.stockAvailability[0]
-        : updateData.stockAvailability;
+    /* ------------------------------------------------
+      Restrict Fields When Approved
+    ------------------------------------------------ */
+    if (status === "Approved") {
+      // Vendor can only change: price, sale price, discount, stock, images & packs
+      const allowedApprovedFields = [
+        "product_price",
+        "product_sale_price",
+        "discountValue",
+        "discountType",
+        "stockAvailability",
+        "product_variants",
+        "product_lens_image1",
+        "product_lens_image2",
+        "contactLens_packs",
+        "colorData",
+      ];
 
-      updateData.stockAvailability = Number(val);
-    } else {
-      updateData.stockAvailability = existing.stockAvailability;
+      const disallowedFields = Object.keys(updateData).filter(
+        (key) => !allowedApprovedFields.includes(key)
+      );
+
+      if (disallowedFields.length > 0) {
+        return res.status(403).json({
+          success: false,
+          message: `Cannot modify these fields after approval: ${disallowedFields.join(
+            ", "
+          )}`,
+        });
+      }
+
+      // Product goes back to Pending and vendor must send for approval again
+      updateData.productStatus = "Pending";
+      updateData.isResubmitted = true;
+      updateData.isSentForApproval = false;
+      updateData.rejectionReason = undefined;
     }
 
-    /* -------- UPDATE -------- */
+    /* ------------------------------------------------
+      Rejected → Vendor can edit everything (but stays Rejected until re-sent)
+    ------------------------------------------------ */
+    if (status === "Rejected") {
+      updateData.productStatus = "Rejected";
+      // keep rejectionReason until they re-send via sendProductForApproval
+    }
+
+    /* ------------------------------------------------
+      Pending → Vendor can edit everything, but not if already sent (handled above)
+    ------------------------------------------------ */
+    if (status === "Pending" && !existing.isSentForApproval) {
+      updateData.productStatus = "Pending";
+    }
+
+    // Force numeric stock
+    if (updateData.stockAvailability !== undefined) {
+      updateData.stockAvailability =
+        Number(updateData.stockAvailability) || 0;
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
@@ -554,8 +684,8 @@ const updateVendorProduct = async (req, res) => {
       message: "Vendor product updated successfully",
       data: updatedProduct,
     });
-
   } catch (error) {
+    console.error("UPDATE VENDOR PRODUCT ERROR:", error);
     return res.status(500).json({
       success: false,
       message: "Error while updating vendor product",
@@ -564,13 +694,10 @@ const updateVendorProduct = async (req, res) => {
   }
 };
 
-
-
-
 const deleteProduct = async (req, res) => {
   try {
-    const { id } = req.params; // product ID from URL
-    const userId = req.user.id; // logged-in user ID
+    const { id } = req.params;
+    const userId = req.user.id;
     const userRole = req.user.role;
 
     // Find product
@@ -586,12 +713,10 @@ const deleteProduct = async (req, res) => {
       userRole === "vendor" &&
       product.vendorID.toString() !== userId.toString()
     ) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Not authorized to delete this product",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Not authorized to delete this product",
+      });
     }
 
     // Delete product
@@ -645,17 +770,17 @@ const searchProducts = async (req, res) => {
     if (search) query.product_name = { $regex: search, $options: "i" };
 
     const products = await Product.find(query).limit(20);
-    return res
-      .status(200)
-      .json({ success: true, count: products.length, products });
+    return res.status(200).json({
+      success: true,
+      count: products.length,
+      products,
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error while searching products",
-        error: error.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Error while searching products",
+      error: error.message,
+    });
   }
 };
 
@@ -664,9 +789,10 @@ const getProductBySubCatId = async (req, res) => {
   try {
     const { subCatId } = req.params;
     if (!subCatId)
-      return res
-        .status(400)
-        .json({ success: false, message: "SubCategory ID is required" });
+      return res.status(400).json({
+        success: false,
+        message: "SubCategory ID is required",
+      });
 
     const products = await Product.find({
       subCat_id: subCatId,
@@ -679,25 +805,23 @@ const getProductBySubCatId = async (req, res) => {
       .populate("subCat_id", "subCategoryName");
 
     if (!products.length) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "No products found for this SubCategory",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "No products found for this SubCategory",
+      });
     }
 
-    return res
-      .status(200)
-      .json({ success: true, count: products.length, data: products });
+    return res.status(200).json({
+      success: true,
+      count: products.length,
+      data: products,
+    });
   } catch (error) {
-    return res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server error while fetching products",
-        error: error.message,
-      });
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching products",
+      error: error.message,
+    });
   }
 };
 
@@ -725,7 +849,6 @@ const getProductByCatId = async (req, res) => {
       count: products.length,
       data: products,
     });
-
   } catch (error) {
     return res.status(500).json({
       success: false,
@@ -734,7 +857,6 @@ const getProductByCatId = async (req, res) => {
     });
   }
 };
-
 
 const applyVendorDiscount = async (req, res) => {
   try {
@@ -795,7 +917,6 @@ const applyVendorDiscount = async (req, res) => {
   }
 };
 
-
 const getBestSellerProducts = async (req, res) => {
   try {
     const products = await Product.find({ isBestSeller: true });
@@ -827,9 +948,6 @@ const getTrendingProducts = async (req, res) => {
     });
   }
 };
-
-
-
 
 const getProductsByBrandId = async (req, res) => {
   try {
@@ -870,7 +988,6 @@ const getProductsByBrandId = async (req, res) => {
       totalProducts: products.length,
       products,
     });
-
   } catch (error) {
     console.error("Error fetching products by brand:", error);
     return res.status(500).json({
@@ -880,7 +997,6 @@ const getProductsByBrandId = async (req, res) => {
     });
   }
 };
-
 
 module.exports = {
   addProduct,
@@ -902,5 +1018,5 @@ module.exports = {
   getProductsByBrandId,
   getBestSellerProducts,
   getTrendingProducts,
-  getProductByCatId
+  getProductByCatId,
 };

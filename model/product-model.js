@@ -80,7 +80,12 @@ const ProductSchema = new mongoose.Schema({
     vendorID: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
 
     // Approval workflow
-    productStatus: { type: String, enum: ["Pending", "Approved", "Rejected"] },
+    productStatus: {
+        type: String,
+        enum: ["Draft", "Pending", "Approved", "Rejected"],
+        default: "Draft"
+    },
+
     isSentForApproval: { type: Boolean },
     sentApprovalDate: { type: Date },
     isBestSeller: { type: Boolean, default: false },
@@ -101,6 +106,24 @@ const ProductSchema = new mongoose.Schema({
 
     // Brand field
     brand_id: { type: mongoose.Schema.Types.ObjectId, ref: "Brand" },
+
+    // For tracking resubmissions after rejection or change
+    resubmissionCount: {
+        type: Number,
+        default: 0,
+    },
+    requiresReapproval: { type: Boolean, default: false },
+
+    // Complete approval history tracking
+    approvalHistory: [
+        {
+            status: { type: String, required: true }, // Pending / Approved / Rejected
+            updatedAt: { type: Date, default: Date.now },
+            reason: { type: String }
+        }
+    ]
+
+
 
 }, { timestamps: true });
 
