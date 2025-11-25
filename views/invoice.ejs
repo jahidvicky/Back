@@ -126,17 +126,13 @@
   <!-- Invoice Section -->
   <div class="section">
     <h2>Invoice</h2>
-    <p><strong>Invoice #:</strong>
-      <%= order._id.toString().slice(-6) %>
-    </p>
-    <p><strong>Date:</strong>
-      <%= order.createdAt.toDateString() %>
-    </p>
+    <p><strong>Invoice #:</strong> <%= order._id.toString().slice(-6) %></p>
+    <p><strong>Date:</strong> <%= order.createdAt.toDateString() %></p>
     <p><strong>Bill To:</strong>
       <%= order.shippingAddress.fullName %>,
-        <%= order.shippingAddress.address %>,
-          <%= order.shippingAddress.city %>
-            <%= order.shippingAddress.postalCode %>
+      <%= order.shippingAddress.address %>,
+      <%= order.shippingAddress.city %>
+      <%= order.shippingAddress.postalCode %>
     </p>
 
     <table>
@@ -150,80 +146,85 @@
         </tr>
       </thead>
       <tbody>
-        <% order.cartItems.forEach((item, i)=> {
-          const basePrice = item.price || 0;
-          const lensPrice = item.lens && item.lens.totalPrice ? item.lens.totalPrice : 0;
-          const policyPrice = item.policy && item.policy.price ? item.policy.price : 0;
-          const totalItemPrice = basePrice + lensPrice + policyPrice;
-          %>
+        <% 
+          const CONTACT_LENS_CATEGORY_IDS = ['6915735feeb23fa59c7d532b'];
+
+          order.cartItems.forEach((item, i)=> {
+            const basePrice = Number(item.price || 0); // frame / item price
+            const lensPrice = Number(item.lens && item.lens.totalPrice ? item.lens.totalPrice : 0);
+            const policyPrice = Number(item.policy && item.policy.price ? item.policy.price : 0);
+
+            // Normalize categoryId to string for comparison
+            const catId = (item.categoryId || item.category_id || '').toString();
+
+            const isContactLens = CONTACT_LENS_CATEGORY_IDS.includes(catId);
+
+            // For contact-lens items: exclude frame/base price, include lens price + policy
+            const totalItemPrice = isContactLens
+              ? (lensPrice + policyPrice)
+              : (basePrice + lensPrice + policyPrice);
+
+            %>
           <tr>
+            <td><%= i + 1 %></td>
             <td>
-              <%= i + 1 %>
-            </td>
-            <td>
-              <strong>
-                <%= item.name %>($<%= item.price %>)
-              </strong>
+              <strong><%= item.name %></strong>
+
+              <% if (isContactLens) { %>
+              <% } else { %>
+                <% if (item.price !== undefined && item.price !== null) { %>
+                  <div style="font-size:11px;color:#555;">
+                    Frame: $<%= basePrice.toFixed(2) %>
+                  </div>
+                <% } %>
+              <% } %>
+
+              <% if (item.lens && item.lens.lens && item.lens.lens.selectedLens) { %>
+                <div style="font-size:11px;color:#555;">
+                  Lens: <%= item.lens.lens.selectedLens %> ($<%= lensPrice.toFixed(2) %>)
+                </div>
+              <% } %>
 
               <% if (item.policy && item.policy.name) { %>
-                <div style="font-size: 11px; color: #555;">
-                  Policy: <%= item.policy.name %> ($<%= item.policy.price.toFixed(2) %>)
+                <div style="font-size:11px;color:#555;">
+                  Policy: <%= item.policy.name %> ($<%= policyPrice.toFixed(2) %>)
                 </div>
-                <% } %>
+              <% } %>
+            </td>
 
-                  <% if (item.lens && item.lens.lens && item.lens.lens.selectedLens) { %>
-                    <div style="font-size: 11px; color: #555;">
-                      Lens: <%= item.lens.lens.selectedLens %> ($<%= item.lens.totalPrice.toFixed(2) %>)
-                    </div>
-                    <% } %>
-            </td>
-            <td>
-              <%= item.quantity %>
-            </td>
-            <td>$<%= totalItemPrice.toFixed(2) %>
-            </td>
-            <td>$<%= (totalItemPrice * item.quantity).toFixed(2) %>
-            </td>
+            <td><%= item.quantity %></td>
+
+            <td>$<%= totalItemPrice.toFixed(2) %></td>
+
+            <td>$<%= (totalItemPrice * (item.quantity || 1)).toFixed(2) %></td>
           </tr>
-          <% }) %>
+        <% }) %>
       </tbody>
     </table>
 
-    <!-- <div class="summary">
-      <p>Subtotal: $<%= order.subtotal.toFixed(2) %>
-      </p>
-      <p>Tax: $<%= order.tax.toFixed(2) %>
-      </p>
-      <p>Shipping: $<%= order.shipping.toFixed(2) %>
-      </p>
-      <h3>Total: $<%= order.total.toFixed(2) %>
-      </h3>
-    </div> -->
     <div class="summary">
-  <p>Subtotal: $<%= order.subtotal.toFixed(2) %></p>
+      <p>Subtotal: $<%= order.subtotal.toFixed(2) %></p>
 
-  <% if (order.discount && order.discount > 0) { %>
-    <p style="color: green;">
-      Discount: -$<%= order.discount.toFixed(2) %>
-      <% if (order.coupon) { %>
-        (<%= order.coupon %>)
+      <% if (order.discount && order.discount > 0) { %>
+        <p style="color: green;">
+          Discount: -$<%= order.discount.toFixed(2) %>
+          <% if (order.coupon) { %>
+            (<%= order.coupon %>)
+          <% } %>
+        </p>
       <% } %>
-    </p>
-  <% } %>
 
-  <p>Tax: $<%= order.tax.toFixed(2) %></p>
-  <p>Shipping: $<%= order.shipping.toFixed(2) %></p>
-  <h3>Total: $<%= order.total.toFixed(2) %></h3>
-</div>
+      <p>Tax: $<%= order.tax.toFixed(2) %></p>
+      <p>Shipping: $<%= order.shipping.toFixed(2) %></p>
+      <h3>Total: $<%= order.total.toFixed(2) %></h3>
+    </div>
 
   </div>
 
   <!-- Warranty Card -->
   <div class="card">
     <h2>Warranty Card</h2>
-    <p><strong>Purchase Date:</strong>
-      <%= order.createdAt.toDateString() %>
-    </p>
+    <p><strong>Purchase Date:</strong> <%= order.createdAt.toDateString() %></p>
     <p><strong>Valid Until:</strong>
       <%= new Date(new Date(order.createdAt).setFullYear(new Date(order.createdAt).getFullYear() + 1)).toDateString() %>
     </p>
@@ -247,12 +248,10 @@
     <h2>Return & Exchange Policy</h2>
     <ol>
       <li>Prescription eyewear and lenses are final sale and non-exchangeable.</li>
-      <li>Non-prescription sunglasses/frames may be exchanged within 7 days if unused and in original packaging. No
-        refunds.</li>
+      <li>Non-prescription sunglasses/frames may be exchanged within 7 days if unused and in original packaging. No refunds.</li>
       <li>No restocking fees for product-related visits or adjustments.</li>
       <li>Fit adjustments, screw replacements, and basic aftercare are free of charge.</li>
-      <li>Contact lenses may be exchanged only if unopened, sealed, and within expiry. Opened boxes are not eligible.
-      </li>
+      <li>Contact lenses may be exchanged only if unopened, sealed, and within expiry. Opened boxes are not eligible.</li>
       <li>No returns on eye drops, cleaning solutions, or other consumables for health & safety reasons.</li>
     </ol>
   </div>
