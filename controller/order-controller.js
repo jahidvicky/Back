@@ -107,6 +107,7 @@ exports.createOrder = async (req, res) => {
           quantity: item.quantity || 1,
           createdBy: product?.createdBy || "admin",
           vendorID: item.vendorID || item.vendorId || null,
+          categoryId: item.categoryId || null,
 
           product_size: item.product_size || [],
           product_color: item.product_color || [],
