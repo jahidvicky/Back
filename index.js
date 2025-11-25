@@ -1,8 +1,10 @@
-const express = require('express');
+const express = require("express");
 require("dotenv").config();
 const path = require("path");
 const cors = require("cors");
 const mongoose = require("mongoose");
+const http = require("http");
+const { initChatSocket } = require("./middleware/chatSocket");
 
 // ***************** Routes ****************
 const faq = require("./routes/faq-Routes");
@@ -39,15 +41,20 @@ const paypalRoutes = require("./routes/paypal-routes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const discountRoutes = require("./routes/discount-routes");
 const brandRoutes = require("./routes/brand-routes");
+const supportChatRoutes = require("./routes/supportChatRoutes");
 
 require("./corn/PolicyExpiryJob"); // Cron job
 
 const app = express();
+const server = http.createServer(app);
+
+// Init Socket.IO
+initChatSocket(server);
 
 // -------------------- CORS SETUP --------------------
 const allowedOrigins = [
-  // "http://localhost:5175",
   // "http://localhost:5173",
+  // "http://localhost:5175",
   // "http://localhost:5176",
   "https://ataloptical.org",
   "https://www.ataloptical.org",
@@ -56,7 +63,7 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: function (origin, callback) {
+    origin(origin, callback) {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -74,8 +81,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // -------------------- STATIC FILES --------------------
 app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
-app.use(express.static('public'));
-app.use("/uploads", express.static("uploads"));
+app.use(express.static("public"));
 
 // -------------------- BASIC ROUTE --------------------
 app.get("/", (req, res) => {
@@ -120,22 +126,18 @@ app.use("/api/paypal", paypalRoutes);
 app.use("/api", uploadRoutes);
 app.use("/api", discountRoutes);
 app.use("/api", brandRoutes);
+app.use("/api", supportChatRoutes);
 
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;
 
 mongoose
-  .connect(process.env.MONGODB_URL, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
-  .then(async () => {
-    await mongoose.connection.asPromise();
-    const dbName = mongoose.connection.db.databaseName;
-    console.log(`Connected to MongoDB Database: ${dbName}`);
+  .connect(process.env.MONGODB_URL)
+  .then(() => {
+    console.log("Connected to MongoDB Database");
     console.log("DB Connected Successfully");
 
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`Server started on Port: ${PORT}`);
     });
   })

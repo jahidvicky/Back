@@ -41,8 +41,6 @@ exports.handlePayPalWebhook = async (req, res) => {
         // Signature valid, process the event
         const eventType = webhookEvent.event_type;
 
-        console.log("Verified PayPal Event:", eventType);
-
         if (eventType === "PAYMENT.CAPTURE.COMPLETED") {
             const orderId = webhookEvent.resource.supplementary_data.related_ids.order_id;
             const paypalPaymentId = webhookEvent.resource.id;
@@ -56,7 +54,6 @@ exports.handlePayPalWebhook = async (req, res) => {
                     },
                 }
             );
-            console.log("Order marked as paid:", orderId);
         }
 
         return res.sendStatus(200);
