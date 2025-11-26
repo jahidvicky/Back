@@ -13,51 +13,66 @@ function initChatSocket(server) {
     });
 
     io.on("connection", (socket) => {
-        // User joins room
+        console.log("Client connected:", socket.id);
+
+        // USER joins room
         socket.on("user:join", ({ chatId }) => {
             socket.join(chatId);
         });
 
-        // Admin joins room
+        // ADMIN joins room
         socket.on("admin:join", ({ chatId }) => {
             socket.join(chatId);
         });
 
-        // Generic typing event (used for admin typing → user)
+        // Admin typing event
         socket.on("admin:typing", ({ chatId }) => {
             socket.to(chatId).emit("typing");
         });
 
-        // User sends message
+        // USER SEND MESSAGE
         socket.on("sendMessage", async ({ chatId, text }) => {
             try {
                 if (!text?.trim()) return;
 
-                const userMsg = { sender: "user", text, createdAt: new Date() };
+                const userMsg = {
+                    chatId,
+                    sender: "user",
+                    text,
+                    createdAt: new Date()
+                };
 
-                const chat = await ChatSession.findByIdAndUpdate(
+                await ChatSession.findByIdAndUpdate(
                     chatId,
                     {
                         $push: { messages: userMsg },
                         status: "active",
-                    },
-                    { new: true }
+                        updatedAt: new Date()
+                    }
                 );
-
-                if (!chat) return;
 
                 io.to(chatId).emit("newMessage", userMsg);
 
-                // AI auto-reply if no admin assigned and chat not closed
+                // AI AUTO REPLY IF NO ADMIN
+                const chat = await ChatSession.findById(chatId);
                 if (!chat.assignedTo && chat.status !== "closed") {
-                    const prompt = `You are ATAL Optical AI Assistant. User reason: ${chat.reason}\nUser: ${text}`;
+                    const prompt = `Assistant for ATAL Optical:
+                    Reason: ${chat.reason}
+                    User: ${text}`;
 
                     try {
                         const aiText = await generateResponse(prompt);
-                        const aiMsg = { sender: "ai", text: aiText, createdAt: new Date() };
+
+                        const aiMsg = {
+                            chatId,
+                            sender: "ai",
+                            text: aiText,
+                            createdAt: new Date()
+                        };
 
                         await ChatSession.findByIdAndUpdate(chatId, {
                             $push: { messages: aiMsg },
+                            updatedAt: new Date()
                         });
 
                         io.to(chatId).emit("newMessage", aiMsg);
@@ -65,25 +80,31 @@ function initChatSocket(server) {
                         console.error("AI reply error:", err.message);
                     }
                 }
+
             } catch (err) {
                 console.error("sendMessage error:", err.message);
             }
         });
 
-        // Admin sends message
+        // ADMIN SEND MESSAGE
         socket.on("admin:sendMessage", async ({ chatId, text }) => {
             try {
                 if (!text?.trim()) return;
 
-                const adminMsg = { sender: "admin", text, createdAt: new Date() };
+                const adminMsg = {
+                    chatId,
+                    sender: "admin",
+                    text,
+                    createdAt: new Date()
+                };
 
                 await ChatSession.findByIdAndUpdate(
                     chatId,
                     {
                         $push: { messages: adminMsg },
                         status: "active",
-                    },
-                    { new: true }
+                        updatedAt: new Date()
+                    }
                 );
 
                 io.to(chatId).emit("newMessage", adminMsg);
@@ -93,7 +114,7 @@ function initChatSocket(server) {
         });
 
         socket.on("disconnect", () => {
-            console.log("Socket disconnected:", socket.id);
+            console.log("Client disconnected:", socket.id);
         });
     });
 }
