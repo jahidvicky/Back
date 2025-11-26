@@ -9,11 +9,12 @@ exports.startSupportChat = async (req, res) => {
             name,
             email,
             reason,
-            status: "pending",
+            status: "active", // UPDATED
             messages: [
                 {
                     sender: "system",
                     text: "Thank you for choosing ATAL Optical! Support will assist you shortly.",
+                    createdAt: new Date()
                 },
             ],
         });
@@ -71,7 +72,6 @@ exports.closeChat = async (req, res) => {
 
         if (!chat) return res.status(404).json({ error: "Chat not found" });
 
-        // Inform admins in real-time
         try {
             const { getIO } = require("../middleware/chatSocket");
             getIO().emit("chatClosed", chat);
