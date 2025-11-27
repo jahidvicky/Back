@@ -53,6 +53,12 @@ const ProductSchema = new mongoose.Schema({
     frame_fit: String,
     face_shape: String,
 
+    //product measurement
+    lens_width: String,
+    bridge_width: String,
+    lens_hieght: String,
+    temple_length: String,
+
     // Lens details
     product_lens_title1: String,
     product_lens_description1: String,
