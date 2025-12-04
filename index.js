@@ -37,11 +37,13 @@ const couponRoutes = require("./routes/coupon-code-router");
 const insurancePolicy = require("./routes/insurancePolicyRoutes");
 const insuranceClaim = require("./routes/insuranceClaimRoutes");
 const chatRoute = require("./routes/chat-routes");
-const paypalRoutes = require("./routes/paypal-routes");
+// const paypalRoutes = require("./routes/paypal-routes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const discountRoutes = require("./routes/discount-routes");
 const brandRoutes = require("./routes/brand-routes");
 const supportChatRoutes = require("./routes/supportChatRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
+const squareWebhook = require("./routes/squareWebhook");
 
 require("./corn/PolicyExpiryJob"); // Cron job
 
@@ -53,11 +55,11 @@ initChatSocket(server);
 
 // -------------------- CORS SETUP --------------------
 const allowedOrigins = [
-  "http://localhost:5173",
-  "http://localhost:5176",
-  // "https://ataloptical.org",
-  // "https://www.ataloptical.org",
-  // "https://dashboard.ataloptical.org"
+  // "http://localhost:5173",
+  // "http://localhost:5176",
+  "https://ataloptical.org",
+  "https://www.ataloptical.org",
+  "https://dashboard.ataloptical.org"
 ];
 
 app.use(
@@ -121,11 +123,13 @@ app.use("/api", couponRoutes);
 app.use("/api", insurancePolicy);
 app.use("/api", insuranceClaim);
 app.use("/api", chatRoute);
-app.use("/api/paypal", paypalRoutes);
+// app.use("/api/paypal", paypalRoutes);
 app.use("/api", uploadRoutes);
 app.use("/api", discountRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", supportChatRoutes);
+app.use("/api", paymentRoutes);
+app.use("/api", squareWebhook);
 
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;
