@@ -19,9 +19,9 @@
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "dayjs": "^1.11.18",
-    "dotenv": "^17.2.1",
+    "dotenv": "^17.2.3",
     "ejs": "^3.1.10",
-    "express": "^5.1.0",
+    "express": "^5.2.1",
     "express-rate-limit": "^8.0.1",
     "joi": "^18.0.0",
     "jsonwebtoken": "^9.0.2",
@@ -33,6 +33,7 @@
     "ollama": "^0.6.3",
     "pdfkit": "^0.17.2",
     "puppeteer": "^24.22.3",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "square": "^43.2.1"
   }
 }
