@@ -6,23 +6,22 @@ exports.createSquarePayment = async (req, res) => {
     try {
         const { nonce, amount } = req.body;
 
-        // 1) Create payment – Square SDK expects bigint here
+        // Create payment
         const result = await squareClient.payments.create({
             sourceId: nonce,
             idempotencyKey: crypto.randomUUID(),
             amountMoney: {
-                amount: BigInt(Math.round(Number(amount) * 100)), // 10 -> 1000n
-                currency: "CAD",                                  // your merchant currency
+                amount: BigInt(Math.round(Number(amount) * 100)),
+                currency: "CAD",
             },
         });
 
         const payment = result.payment;
 
-        // 2) Make a JSON-safe object (no BigInt in response)
-        const safeAmount =
-            payment.amountMoney && payment.amountMoney.amount != null
-                ? Number(payment.amountMoney.amount) // BigInt -> Number
-                : null;
+        // Make JSON-safe version
+        const safeAmount = payment.amountMoney?.amount
+            ? Number(payment.amountMoney.amount)
+            : null;
 
         const responseData = {
             id: payment.id,
@@ -32,10 +31,21 @@ exports.createSquarePayment = async (req, res) => {
             createdAt: payment.createdAt,
         };
 
-        res.json({
+        // ❗ VALIDATE PAYMENT STATUS
+        if (payment.status !== "COMPLETED") {
+            return res.json({
+                success: false,
+                message: "Card declined or payment failed",
+                payment: responseData,
+            });
+        }
+
+        // SUCCESS
+        return res.json({
             success: true,
             payment: responseData,
         });
+
     } catch (error) {
         console.error("Square Error:", error);
 

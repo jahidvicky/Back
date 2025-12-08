@@ -15,13 +15,6 @@ exports.handleSquareWebhook = async (req, res) => {
             .update(bodyString)
             .digest("base64");
 
-        console.log("===== DEBUG START =====");
-        console.log("➡ Signature Header:", signature);
-        console.log("➡ Webhook Key:", signatureKey);
-        console.log("➡ Raw Body String:", bodyString);
-        console.log("➡ Computed Hash:", computedHash);
-        console.log("===== DEBUG END =====");
-
         if (computedHash !== signature) {
             console.log("Invalid Webhook Signature");
             return res.status(400).send("Invalid signature");
@@ -29,8 +22,6 @@ exports.handleSquareWebhook = async (req, res) => {
 
         // Parse the JSON only AFTER signature validation
         const event = JSON.parse(bodyString);
-
-        console.log("Webhook Event Type:", event.type);
 
         // PAYMENT UPDATE EVENTS
         if (event.type === "payment.updated") {
@@ -40,8 +31,6 @@ exports.handleSquareWebhook = async (req, res) => {
                 { transactionId: payment.id },
                 { paymentStatus: payment.status }
             );
-
-            console.log("Order Updated:", payment.id, payment.status);
         }
 
         return res.sendStatus(200);
