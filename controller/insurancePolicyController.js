@@ -124,6 +124,88 @@ exports.getPoliciesByCompanyId = async (req, res) => {
 };
 
 
+
+
+
+
+// Get all orders policies that purchased a policy from all insurance company
+exports.getAllPolicies = async (req, res) => {
+  try {
+    const orders = await orderModel.find({
+      "cartItems.policy": { $exists: true, $ne: null }
+    });
+
+    const policies = [];
+    const now = new Date();
+
+    orders.forEach(order => {
+      order.cartItems.forEach(item => {
+        if (item.policy) {
+
+          // Calculate expiry
+          const expiry = item.policy.expiryDate
+            ? new Date(item.policy.expiryDate)
+            : new Date(
+              new Date(item.policy.purchasedAt).getTime() +
+              (item.policy.durationDays || 0) * 86400000
+            );
+
+          const isExpired = expiry < now;
+
+          policies.push({
+            orderId: order._id,
+            policyId: item._id,
+
+            policyName: item.policy.name,
+            policyPrice: item.policy.price,
+            coverage: item.policy.coverage,
+            durationDays: item.policy.durationDays,
+            purchasedAt: item.policy.purchasedAt,
+
+            expiryDate: expiry,
+
+            // Auto-mark status
+            status: isExpired ? "Expired" : "Active",
+
+            customer: {
+              email: order.email,
+              name: order.shippingAddress?.fullName,
+              phone: order.shippingAddress?.phone,
+            },
+
+            product: {
+              name: item.name,
+              image: item.image,
+              price: item.price,
+            },
+
+            orderStatus: order.orderStatus,
+            paymentStatus: order.paymentStatus,
+          });
+        }
+      });
+    });
+
+    return res.status(200).json({
+      success: true,
+      total: policies.length,
+      policies,
+    });
+
+  } catch (error) {
+    console.error("Error fetching policies:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error fetching policies",
+      error: error.message,
+    });
+  }
+};
+
+
+
+
+
 // Admin: Update policy
 exports.updatePolicy = async (req, res) => {
   try {
