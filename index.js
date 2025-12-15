@@ -44,6 +44,7 @@ const brandRoutes = require("./routes/brand-routes");
 const supportChatRoutes = require("./routes/supportChatRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const squareWebhook = require("./routes/squareWebhook");
+const community = require("./routes/frame-donation.routes")
 
 require("./corn/PolicyExpiryJob"); // Cron job
 
@@ -130,6 +131,8 @@ app.use("/api", brandRoutes);
 app.use("/api", supportChatRoutes);
 app.use("/api", paymentRoutes);
 app.use("/api", squareWebhook);
+app.use("/api", community);
+
 
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;
