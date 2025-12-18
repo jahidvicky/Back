@@ -3,10 +3,10 @@ const sendFrameDonationMail = require("../utils/frameDonationMailer");
 
 exports.createDonation = async (req, res) => {
     try {
-        const { name, email, phone, address, postal } = req.body;
+        const { name, email, phone, address, postal, frameType } = req.body;
 
         // 1️⃣ Required fields check
-        if (!name || !email || !phone || !address || !postal) {
+        if (!name || !email || !phone || !address || !postal || !frameType) {
             return res.status(400).json({
                 success: false,
                 message: "All fields are required",
@@ -49,6 +49,7 @@ exports.createDonation = async (req, res) => {
             phone,
             address,        // full combined address
             postal,         // optional: store separately if schema allows
+            frameType,
             frameImages: imageFiles,
         });
 
