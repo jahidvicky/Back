@@ -6,6 +6,7 @@ const frameDonationSchema = new mongoose.Schema(
         email: { type: String, required: true },
         phone: { type: String, required: true },
         address: { type: String, required: true },
+        frameType: { type: String, required: true },
         frameImages: {
             type: [String],
             required: true,
