@@ -1,8 +1,13 @@
 const mongoose = require("mongoose");
 
-const ProductSchema = new mongoose.Schema({
+const ProductSchema = new mongoose.Schema(
+  {
     // Category
-    cat_id: { type: mongoose.Schema.Types.ObjectId, ref: "Category", required: true },
+    cat_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+    },
     cat_sec: { type: String, required: true },
 
     // Subcategory
@@ -12,17 +17,22 @@ const ProductSchema = new mongoose.Schema({
     // Product info
     product_name: { type: String, required: true },
     product_size: {
-        type: [String],
+      type: [String],
+    },
+
+    unit: {
+      type: String,
+      enum: ["Piece"],
     },
 
     /* ----------------------------------------------------------
         NEW STRUCTURE: Color-based image collection
     -----------------------------------------------------------*/
     product_variants: [
-        {
-            colorName: { type: String, required: true }, // e.g. "Red", "Black", "Blue"
-            images: [String], // All image URLs for that color
-        },
+      {
+        colorName: { type: String, required: true }, // e.g. "Red", "Black", "Blue"
+        images: [String], // All image URLs for that color
+      },
     ],
 
     product_price: { type: Number, required: true },
@@ -32,16 +42,16 @@ const ProductSchema = new mongoose.Schema({
 
     // Discount fields (vendor controlled)
     discountType: {
-        type: String,
-        enum: ["percentage", "flat"],
-        default: "percentage",
+      type: String,
+      enum: ["percentage", "flat"],
+      default: "percentage",
     },
     discountedPrice: {
-        type: Number
+      type: Number,
     },
     discountValue: {
-        type: Number,
-        default: 0,
+      type: Number,
+      default: 0,
     },
 
     stockAvailability: { type: Number, default: 0, min: 0 },
@@ -73,23 +83,26 @@ const ProductSchema = new mongoose.Schema({
     manufacturer: String,
     water_content: String,
     contactLens_packs: [
-        {
-            packSize: { type: Number, required: true },
-            oldPrice: { type: Number, required: true },
-            salePrice: { type: Number, required: true },
-            isBestValue: { type: Boolean, default: false }
-        }
+      {
+        packSize: { type: Number, required: true },
+        oldPrice: { type: Number, required: true },
+        salePrice: { type: Number, required: true },
+        isBestValue: { type: Boolean, default: false },
+      },
     ],
 
-
     // Vendor reference
-    vendorID: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: false },
+    vendorID: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: false,
+    },
 
     // Approval workflow
     productStatus: {
-        type: String,
-        enum: ["Draft", "Pending", "Approved", "Rejected"],
-        default: "Draft"
+      type: String,
+      enum: ["Draft", "Pending", "Approved", "Rejected"],
+      default: "Draft",
     },
 
     isSentForApproval: { type: Boolean },
@@ -115,22 +128,21 @@ const ProductSchema = new mongoose.Schema({
 
     // For tracking resubmissions after rejection or change
     resubmissionCount: {
-        type: Number,
-        default: 0,
+      type: Number,
+      default: 0,
     },
     requiresReapproval: { type: Boolean, default: false },
 
     // Complete approval history tracking
     approvalHistory: [
-        {
-            status: { type: String, required: true }, // Pending / Approved / Rejected
-            updatedAt: { type: Date, default: Date.now },
-            reason: { type: String }
-        }
-    ]
-
-
-
-}, { timestamps: true });
+      {
+        status: { type: String, required: true }, // Pending / Approved / Rejected
+        updatedAt: { type: Date, default: Date.now },
+        reason: { type: String },
+      },
+    ],
+  },
+  { timestamps: true }
+);
 
 module.exports = mongoose.model("Product", ProductSchema);
