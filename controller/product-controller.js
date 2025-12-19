@@ -76,8 +76,7 @@ const addProduct = async (req, res) => {
     }
 
     /* ---------------- STOCK ---------------- */
-    productData.stockAvailability =
-      Number(productData.stockAvailability) || 0;
+    productData.stockAvailability = Number(productData.stockAvailability) || 0;
 
     /* ---------------- CATEGORY ---------------- */
     const category = await Category.findById(productData.cat_id);
@@ -87,6 +86,17 @@ const addProduct = async (req, res) => {
         .json({ success: false, message: "Category not found" });
 
     productData.cat_sec = category.categoryName;
+
+    /* ---------------- UNIT VALIDATION ---------------- */
+    const CONTACT_LENS_ID = "6915735feeb23fa59c7d532b";
+
+    if (productData.cat_id.toString() === CONTACT_LENS_ID) {
+      // Contact Lens → NEVER store unit
+      delete productData.unit;
+    } else {
+      //  Glasses / Sunglasses → force Piece
+      productData.unit = "Piece";
+    }
 
     /* ---------------- SUB CATEGORY ---------------- */
     if (productData.subCat_id) {
@@ -343,7 +353,9 @@ const sendApprovedProduct = async (req, res) => {
     const product = await Product.findById(req.params.productId);
 
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
     }
 
     product.productStatus = "Approved";
@@ -356,7 +368,7 @@ const sendApprovedProduct = async (req, res) => {
     product.approvalHistory.push({
       status: "Approved",
       updatedAt: new Date(),
-      reason: "Approved by admin"
+      reason: "Approved by admin",
     });
 
     await product.save();
@@ -375,12 +387,13 @@ const sendApprovedProduct = async (req, res) => {
   }
 };
 
-
 const rejectProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) {
-      return res.status(404).json({ success: false, message: "Product not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found" });
     }
 
     product.productStatus = "Rejected";
@@ -402,7 +415,6 @@ const rejectProduct = async (req, res) => {
   }
 };
 
-
 // ----------------------------
 // Update Product (Admin) - FIXED VERSION
 // ----------------------------
@@ -414,9 +426,7 @@ const updateProduct = async (req, res) => {
     /* ---------------- CONTACT LENS PACKS ---------------- */
     if (updateData.contactLens_packs) {
       try {
-        updateData.contactLens_packs = JSON.parse(
-          updateData.contactLens_packs
-        );
+        updateData.contactLens_packs = JSON.parse(updateData.contactLens_packs);
       } catch (e) {
         updateData.contactLens_packs = [];
       }
@@ -432,6 +442,15 @@ const updateProduct = async (req, res) => {
         colorName: cv.colorName.trim().toLowerCase(),
         images: cv.images || [],
       }));
+    }
+
+    /* ---------------- UNIT ENFORCEMENT ---------------- */
+    const CONTACT_LENS_ID = "6915735feeb23fa59c7d532b";
+
+    if (updateData.cat_id?.toString() === CONTACT_LENS_ID) {
+      delete updateData.unit;
+    } else if (updateData.cat_id) {
+      updateData.unit = "Piece";
     }
 
     /* -------- GROUP FILES -------- */
@@ -551,9 +570,7 @@ const updateVendorProduct = async (req, res) => {
     ------------------------------------------------ */
     if (updateData.contactLens_packs) {
       try {
-        updateData.contactLens_packs = JSON.parse(
-          updateData.contactLens_packs
-        );
+        updateData.contactLens_packs = JSON.parse(updateData.contactLens_packs);
       } catch (e) {
         updateData.contactLens_packs = [];
       }
@@ -670,8 +687,7 @@ const updateVendorProduct = async (req, res) => {
 
     // Force numeric stock
     if (updateData.stockAvailability !== undefined) {
-      updateData.stockAvailability =
-        Number(updateData.stockAvailability) || 0;
+      updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
