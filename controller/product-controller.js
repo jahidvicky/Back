@@ -76,7 +76,7 @@ const addProduct = async (req, res) => {
     }
 
     /* ---------------- STOCK ---------------- */
-    productData.stockAvailability = Number(productData.stockAvailability) || 0;
+    // productData.stockAvailability = Number(productData.stockAvailability) || 0;
 
     /* ---------------- CATEGORY ---------------- */
     const category = await Category.findById(productData.cat_id);
@@ -495,9 +495,9 @@ const updateProduct = async (req, res) => {
     }
 
     // numeric stock
-    if (updateData.stockAvailability !== undefined) {
-      updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
-    }
+    // if (updateData.stockAvailability !== undefined) {
+    //   updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
+    // }
 
     /* -------- UPDATE PRODUCT -------- */
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
@@ -686,9 +686,9 @@ const updateVendorProduct = async (req, res) => {
     }
 
     // Force numeric stock
-    if (updateData.stockAvailability !== undefined) {
-      updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
-    }
+    // if (updateData.stockAvailability !== undefined) {
+    //   updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
+    // }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
       new: true,

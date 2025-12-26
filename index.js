@@ -45,6 +45,7 @@ const supportChatRoutes = require("./routes/supportChatRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const squareWebhook = require("./routes/squareWebhook");
 const community = require("./routes/frame-donation.routes")
+const inventoryRoutes = require("./routes/inventory.routes")
 
 require("./corn/PolicyExpiryJob");
 
@@ -132,6 +133,8 @@ app.use("/api", supportChatRoutes);
 app.use("/api", paymentRoutes);
 app.use("/api", squareWebhook);
 app.use("/api", community);
+app.use("/api/inventory", inventoryRoutes);
+
 
 
 // -------------------- DATABASE CONNECTION --------------------
