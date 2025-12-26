@@ -47,7 +47,7 @@ const squareWebhook = require("./routes/squareWebhook");
 const community = require("./routes/frame-donation.routes")
 const inventoryRoutes = require("./routes/inventory.routes")
 
-require("./corn/PolicyExpiryJob"); // Cron job
+require("./corn/PolicyExpiryJob");
 
 const app = express();
 const server = http.createServer(app);
