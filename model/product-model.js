@@ -54,7 +54,14 @@ const ProductSchema = new mongoose.Schema(
       default: 0,
     },
 
-    stockAvailability: { type: Number, default: 0, min: 0 },
+    availableStock: { type: Number, default: 0, min: 0 },
+    inStock: { type: Boolean, default: false },
+    productLocation: {
+      type: [String],
+      default: []
+    },
+
+
 
     // Sunglasses
     frame_material: String,
@@ -132,6 +139,12 @@ const ProductSchema = new mongoose.Schema(
       default: 0,
     },
     requiresReapproval: { type: Boolean, default: false },
+
+    itemCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+    },
 
     // Complete approval history tracking
     approvalHistory: [

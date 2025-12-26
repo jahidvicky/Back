@@ -9,6 +9,12 @@ const orderSchema = new mongoose.Schema(
     },
     email: { type: String, required: true },
 
+    location: {
+      type: String,
+      enum: ["east", "west"],
+      required: true,
+    },
+
     //  Updated cartItems structure with color variant support
     cartItems: [
       {
