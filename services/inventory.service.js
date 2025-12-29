@@ -1,6 +1,7 @@
 const Inventory = require("../model/inventory-model");
 const Product = require("../model/product-model");
 const generateItemCode = require("../utils/generateItemCode");
+const InventoryHistory = require("../model/inventoryHistory-model")
 
 /**
  * ADD STOCK
@@ -39,14 +40,32 @@ exports.addRawStock = async ({ productId, location, quantity }) => {
         await inventory.save();
     }
 
-    /*  Sync product for non-lab items */
-    if (!requiresLab) {
-        await Product.findByIdAndUpdate(productId, {
-            $inc: { availableStock: quantity },
-            $set: { inStock: true },
-            $set: { productLocation: location }
-        });
-    }
+    const normalizedLocation = location.toLowerCase();
+
+    let locs = Array.isArray(product.productLocation)
+        ? product.productLocation
+        : product.productLocation
+            ? [product.productLocation]
+            : [];
+
+    if (!locs.includes(normalizedLocation)) locs.push(normalizedLocation);
+
+    await Product.findByIdAndUpdate(productId, {
+        $inc: { availableStock: quantity },
+        $set: {
+            inStock: true,
+            productLocation: locs
+        }
+    });
+
+
+    await InventoryHistory.create({
+        action: "stock_added",
+        location,
+        productId,
+        quantity,
+        performedBy: "admin"
+    });
 
     return inventory;
 
@@ -85,19 +104,68 @@ exports.receiveFromLab = async ({ productId, location, quantity }) => {
     await inventory.save();
 };
 
+
+/**
+ * When user orders:
+ * 1) use finished if available
+ * 2) otherwise consume raw
+ */
+exports.consumeForOrder = async ({ productId, location, quantity }) => {
+    const inventory = await Inventory.findOne({ productId, location });
+
+    if (!inventory) throw new Error("Inventory not found");
+
+    const totalAvailable =
+        inventory.rawStock + inventory.inProcessing + inventory.finishedStock - inventory.orderedStock;
+
+    if (totalAvailable < quantity) throw new Error("Out of stock");
+
+    // prefer finished first
+    let remaining = quantity;
+
+    if (inventory.finishedStock >= remaining) {
+        inventory.finishedStock -= remaining;
+        remaining = 0;
+    } else {
+        remaining -= inventory.finishedStock;
+        inventory.finishedStock = 0;
+    }
+
+    // fallback to raw
+    if (remaining > 0) {
+        inventory.rawStock -= remaining;
+        remaining = 0;
+    }
+
+    inventory.orderedStock += quantity;
+
+    await inventory.save();
+};
+
+
 /**
  * FINISHED → SOLD
  */
 exports.sellItem = async ({ productId, location, quantity }) => {
     const inventory = await Inventory.findOne({ productId, location });
 
-    if (!inventory || inventory.finishedStock < quantity) {
-        throw new Error(
-            `Out of stock for ${location}. Available: ${inventory?.finishedStock || 0}`
-        );
+    if (!inventory) {
+        throw new Error("Inventory not found");
     }
 
-    inventory.finishedStock -= quantity;
+    const totalAvailable =
+        (inventory.rawStock || 0) +
+        (inventory.inProcessing || 0) +
+        (inventory.finishedStock || 0) -
+        (inventory.orderedStock || 0);
+
+    if (totalAvailable < quantity) {
+        throw new Error("Out of stock");
+    }
+
+    // Reserve inventory
+    inventory.orderedStock += quantity;
+
     await inventory.save();
 };
 
@@ -107,11 +175,36 @@ exports.sellItem = async ({ productId, location, quantity }) => {
 exports.validateFinishedStock = async ({ productId, location, quantity }) => {
     const inventory = await Inventory.findOne({ productId, location });
 
-    if (!inventory || inventory.finishedStock < quantity) {
-        throw new Error(
-            `Out of stock for ${location}. Available: ${inventory?.finishedStock || 0}`
-        );
+    if (!inventory) throw new Error("Inventory not found");
+
+    const totalAvailable =
+        (inventory.rawStock || 0) +
+        (inventory.inProcessing || 0) +
+        (inventory.finishedStock || 0) -
+        (inventory.orderedStock || 0);
+
+    if (totalAvailable < quantity) {
+        throw new Error("Out of stock");
     }
 
     return true;
 };
+
+
+exports.rollbackStock = async ({ productId, location, quantity }) => {
+    const inventory = await Inventory.findOne({ productId, location });
+
+    if (!inventory) return;
+
+    // Undo reservation
+    inventory.orderedStock -= quantity;
+    if (inventory.orderedStock < 0) inventory.orderedStock = 0;
+
+    // Cancelled orders go back to RAW stage
+    inventory.rawStock += quantity;
+
+    await inventory.save();
+};
+
+
+

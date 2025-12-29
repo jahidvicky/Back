@@ -6,6 +6,8 @@ const productModel = require("../model/product-model");
 const dayjs = require("dayjs");
 const { verifyPayPalPayment } = require("../utils/paypal")
 const InventoryService = require("../services/inventory.service");
+const Inventory = require("../model/inventory-model");
+const InventoryHistory = require("../model/inventoryHistory-model");
 
 
 
@@ -142,17 +144,25 @@ exports.createOrder = async (req, res) => {
       ],
     };
 
-    // INVENTORY CHECK BEFORE ORDER CREATION
     for (const item of cartItemsWithDetails) {
-      await InventoryService.validateFinishedStock({
+      await InventoryService.consumeForOrder({
         productId: item.productId,
         location,
-        quantity: item.quantity,
+        quantity: item.quantity
       });
     }
 
+
+
     const order = new Order(orderData);
     await order.save();
+    await InventoryHistory.create({
+      action: "order_placed",
+      location: order.location,
+      orderId: order._id,
+      quantity: order.cartItems.reduce((t, i) => t + i.quantity, 0),
+      performedBy: order.email
+    });
 
 
 
@@ -214,128 +224,38 @@ exports.getOrderById = async (req, res) => {
 };
 
 exports.updateOrderStatus = async (req, res) => {
-  const session = await Order.startSession();
-  session.startTransaction();
-
   try {
     const { orderId } = req.params;
     const { status, trackingNumber, deliveryDate, message } = req.body;
 
-    const order = await Order.findById(orderId).session(session);
+    const order = await Order.findById(orderId);
     if (!order) {
-      await session.abortTransaction();
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
     }
 
-    if (status === order.orderStatus) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: "Order already in this status",
-      });
-    }
-
-    const allowedTransitions = {
-      Placed: ["Sent To Lab"],
-      "Sent To Lab": ["Received From Lab"],
-      "Received From Lab": ["Delivered"],
-    };
-
-    if (
-      allowedTransitions[order.orderStatus] &&
-      !allowedTransitions[order.orderStatus].includes(status)
-    ) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: `Invalid status change from ${order.orderStatus} to ${status}`,
-      });
-    }
-
-    /* ========== INVENTORY MOVEMENT (SESSION SAFE) ========== */
-
-    for (const item of order.cartItems) {
-      const isPrescription = !!item.lens;
-
-      // 🟡 RAW → PROCESSING (Prescription only)
-      if (status === "Sent To Lab") {
-        if (!isPrescription) {
-          await session.abortTransaction();
-          return res.status(400).json({
-            success: false,
-            message: "Non-prescription items cannot be sent to lab",
-          });
-        }
-
-        await InventoryService.sendToLab({
-          productId: item.productId,
-          location: order.location,
-          quantity: item.quantity,
-          session,
-        });
-      }
-
-      // 🟡 PROCESSING → FINISHED
-      if (status === "Received From Lab") {
-        if (!isPrescription) {
-          await session.abortTransaction();
-          return res.status(400).json({
-            success: false,
-            message: "Invalid lab receive for non-prescription item",
-          });
-        }
-
-        await InventoryService.receiveFromLab({
-          productId: item.productId,
-          location: order.location,
-          quantity: item.quantity,
-          session,
-        });
-      }
-
-      // 🟢 FINISHED → SOLD (ALL ITEMS)
-      if (status === "Delivered") {
-        await InventoryService.sellItem({
-          productId: item.productId,
-          location: order.location,
-          quantity: item.quantity,
-          session,
-        });
-      }
-    }
-
-    /* ========== UPDATE ORDER ========== */
-
-    order.orderStatus = status;
+    //  Update fields
+    if (status) order.orderStatus = status;
     if (trackingNumber) order.trackingNumber = trackingNumber;
     if (deliveryDate) order.deliveryDate = deliveryDate;
 
+    //  Log status change in tracking history
     order.trackingHistory.push({
-      status,
-      message: message || `Order updated to ${status}`,
-      updatedAt: new Date(),
+      status: status || order.orderStatus,
+      message: message || `Order updated to ${status || order.orderStatus}`,
     });
 
-    await order.save({ session });
-    await session.commitTransaction();
+    await order.save();
 
-    return res.json({
+    res.json({
       success: true,
       message: "Order updated successfully",
       order,
     });
   } catch (err) {
-    await session.abortTransaction();
     console.error("Update Order Error:", err);
-    return res.status(500).json({
-      success: false,
-      message: err.message,
-    });
-  } finally {
-    session.endSession();
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -347,7 +267,13 @@ exports.cancleOrder = async (req, res) => {
     const { orderId } = req.params;
     const { userId, productId } = req.body;
 
-    // 🔍 Fetch order first
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
+
     const order = await Order.findById(orderId);
     if (!order) {
       return res.status(404).json({
@@ -356,16 +282,7 @@ exports.cancleOrder = async (req, res) => {
       });
     }
 
-    if (!userId) {
-      return res.status(400).json({
-        success: false,
-        message: "User ID is required",
-      });
-    }
-
-    /* =====================================================
-       CASE 1: Cancel a specific product from the order
-    ===================================================== */
+    // If specific product is cancelled
     if (productId) {
       const product = order.cartItems.find(
         (item) => item._id.toString() === productId
@@ -385,19 +302,10 @@ exports.cancleOrder = async (req, res) => {
         });
       }
 
-      // 🔁 INVENTORY ROLLBACK (only if not delivered)
-      if (order.orderStatus !== "Delivered") {
-        await InventoryService.rollbackStock({
-          productId: product.productId,
-          location: order.location,
-          quantity: product.quantity,
-        });
-      }
-
       // Mark product as cancelled
       product.status = "Cancelled";
 
-      // Tracking history
+      // Add tracking entry
       order.trackingHistory.push({
         status: "Cancelled",
         message: `Product '${product.name}' cancelled by customer`,
@@ -406,7 +314,7 @@ exports.cancleOrder = async (req, res) => {
         updatedAt: new Date(),
       });
 
-      // Check if all products are cancelled
+      // Check if all products are now cancelled
       const allCancelled = order.cartItems.every(
         (item) => item.status === "Cancelled"
       );
@@ -433,26 +341,8 @@ exports.cancleOrder = async (req, res) => {
       });
     }
 
-    /* =====================================================
-       CASE 2: Cancel the entire order
-    ===================================================== */
-
-    // 🔁 INVENTORY ROLLBACK (only if not delivered)
-    if (order.orderStatus !== "Delivered") {
-      for (const item of order.cartItems) {
-        await InventoryService.rollbackStock({
-          productId: item.productId,
-          location: order.location,
-          quantity: item.quantity,
-        });
-      }
-    }
-
-    // Cancel all products
-    order.cartItems.forEach((item) => {
-      item.status = "Cancelled";
-    });
-
+    // Else — cancel full order directly
+    order.cartItems.forEach((item) => (item.status = "Cancelled"));
     order.orderStatus = "Cancelled";
     order.trackingHistory.push({
       status: "Cancelled",

@@ -46,6 +46,7 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const squareWebhook = require("./routes/squareWebhook");
 const community = require("./routes/frame-donation.routes")
 const inventoryRoutes = require("./routes/inventory.routes")
+const inventoryHistory = require("./routes/inventory-history-routes")
 
 require("./corn/PolicyExpiryJob");
 
@@ -134,6 +135,7 @@ app.use("/api", paymentRoutes);
 app.use("/api", squareWebhook);
 app.use("/api", community);
 app.use("/api/inventory", inventoryRoutes);
+app.use("/api", inventoryHistory);
 
 
 
