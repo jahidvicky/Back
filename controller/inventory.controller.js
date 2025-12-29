@@ -1,7 +1,7 @@
 const InventoryService = require("../services/inventory.service");
 const Inventory = require("../model/inventory-model");
 const Product = require("../model/product-model");
-
+const InventoryHistory = require("../model/inventoryHistory-model");
 /* ============================
    ADD STOCK
 ============================ */
@@ -56,6 +56,14 @@ exports.moveToProcessing = async (req, res) => {
 
         await inventory.save();
 
+        await InventoryHistory.create({
+            action: "moved_processing",
+            location: inventory.location,
+            productId: inventory.productId,
+            quantity,
+            performedBy: "admin"
+        });
+
         res.json({ success: true, message: "Moved to processing", inventory });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -88,6 +96,13 @@ exports.moveToFinished = async (req, res) => {
             inventory.status = "Finished";
 
         await inventory.save();
+        await InventoryHistory.create({
+            action: "moved_finished",
+            location: inventory.location,
+            productId: inventory.productId,
+            quantity,
+            performedBy: "admin"
+        });
 
         /* 🔥 UPDATE PRODUCT LOCATIONS (MERGE, NEVER OVERWRITE) */
         const normalizedLocation = (location || "").toLowerCase();
@@ -103,8 +118,7 @@ exports.moveToFinished = async (req, res) => {
             if (!locs.includes(normalizedLocation)) locs.push(normalizedLocation);
 
             await Product.findByIdAndUpdate(inventory.productId, {
-                $inc: { availableStock: quantity },
-                $set: { inStock: true, productLocation: locs },
+                $set: { inStock: true, productLocation: locs }
             });
         }
 
@@ -182,26 +196,37 @@ exports.getAvailableProducts = async (req, res) => {
 
         const inventory = await Inventory.find({
             location,
-            finishedStock: { $gt: 0 },
+            $expr: {
+                $gt: [
+                    {
+                        $subtract: [
+                            { $add: ["$rawStock", "$inProcessing", "$finishedStock"] },
+                            "$orderedStock"
+                        ]
+                    },
+                    0
+                ]
+            }
         }).populate("productId");
 
         const products = inventory
-            .filter(
-                (i) =>
-                    i.productId &&
-                    i.productId.productStatus === "Approved"
+            .filter(i =>
+                i.productId &&
+                i.productId.productStatus === "Approved"
             )
-            .map((i) => ({
+            .map(i => ({
                 ...i.productId.toObject(),
-                availableQty: i.finishedStock,
+                availableQty:
+                    i.rawStock + i.inProcessing + i.finishedStock - i.orderedStock,
             }));
 
         res.json({ success: true, products });
+
     } catch (err) {
-        console.error("getAvailableProducts error:", err);
         res.status(500).json({
             success: false,
             message: "Failed to fetch available products",
         });
     }
 };
+

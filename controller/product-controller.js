@@ -389,7 +389,13 @@ const sendApprovedProduct = async (req, res) => {
 
 const rejectProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
+    const product = await Product.findById(req.params.id)
+      .populate({
+        path: "inventory",           // relation key in Product model
+        match: {},                   // all locations
+        select: "rawStock inProcessing finishedStock orderedStock location"
+      });
+
     if (!product) {
       return res
         .status(404)

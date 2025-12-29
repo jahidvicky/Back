@@ -25,6 +25,11 @@ const ProductSchema = new mongoose.Schema(
       enum: ["Piece"],
     },
 
+    inventory: [
+      { type: mongoose.Schema.Types.ObjectId, ref: "Inventory" }
+    ],
+
+
     /* ----------------------------------------------------------
         NEW STRUCTURE: Color-based image collection
     -----------------------------------------------------------*/
