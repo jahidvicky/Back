@@ -5,11 +5,15 @@ const generateTrackingNumber = require("../utils/generateTrackingNumber");
 const productModel = require("../model/product-model");
 const dayjs = require("dayjs");
 const { verifyPayPalPayment } = require("../utils/paypal")
+const InventoryService = require("../services/inventory.service");
+const Inventory = require("../model/inventory-model");
+const InventoryHistory = require("../model/inventoryHistory-model");
+
 
 
 exports.createOrder = async (req, res) => {
   try {
-    const { email, cartItems, total, paymentMethod, transactionId } = req.body;
+    const { email, cartItems, total, paymentMethod, transactionId, location } = req.body;
 
     if (!cartItems || cartItems.length === 0) {
       return res
@@ -20,6 +24,13 @@ exports.createOrder = async (req, res) => {
       return res
         .status(400)
         .json({ success: false, message: "Email required" });
+    }
+
+    if (!location || !["east", "west"].includes(location)) {
+      return res.status(400).json({
+        success: false,
+        message: "Location is required (east or west)",
+      });
     }
 
     // Verify payment if PayPal
@@ -133,8 +144,27 @@ exports.createOrder = async (req, res) => {
       ],
     };
 
+    for (const item of cartItemsWithDetails) {
+      await InventoryService.consumeForOrder({
+        productId: item.productId,
+        location,
+        quantity: item.quantity
+      });
+    }
+
+
+
     const order = new Order(orderData);
     await order.save();
+    await InventoryHistory.create({
+      action: "order_placed",
+      location: order.location,
+      orderId: order._id,
+      quantity: order.cartItems.reduce((t, i) => t + i.quantity, 0),
+      performedBy: order.email
+    });
+
+
 
     try {
       await transporter.sendMail({
@@ -228,6 +258,9 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
+
+
+
 
 exports.cancleOrder = async (req, res) => {
   try {
@@ -335,6 +368,7 @@ exports.cancleOrder = async (req, res) => {
     });
   }
 };
+
 
 exports.getOrderTracking = async (req, res) => {
   try {

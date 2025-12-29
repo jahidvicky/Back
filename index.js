@@ -45,8 +45,10 @@ const supportChatRoutes = require("./routes/supportChatRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const squareWebhook = require("./routes/squareWebhook");
 const community = require("./routes/frame-donation.routes")
+const inventoryRoutes = require("./routes/inventory.routes")
+const inventoryHistory = require("./routes/inventory-history-routes")
 
-require("./corn/PolicyExpiryJob"); // Cron job
+require("./corn/PolicyExpiryJob");
 
 const app = express();
 const server = http.createServer(app);
@@ -132,6 +134,9 @@ app.use("/api", supportChatRoutes);
 app.use("/api", paymentRoutes);
 app.use("/api", squareWebhook);
 app.use("/api", community);
+app.use("/api/inventory", inventoryRoutes);
+app.use("/api", inventoryHistory);
+
 
 
 // -------------------- DATABASE CONNECTION --------------------
