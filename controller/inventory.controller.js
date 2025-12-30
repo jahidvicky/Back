@@ -160,18 +160,23 @@ exports.moveFinishedToOrdered = async (req, res) => {
 
         await inventory.save();
 
-        /* 🔁 SYNC PRODUCT LOCATIONS (remove empty branches) */
-        const inventories = await Inventory.find({
-            productId,
-            finishedStock: { $gt: 0 },
-        });
+        /* 🔁 SYNC PRODUCT LOCATIONS (real available stock) */
+        const inventories = await Inventory.find({ productId });
 
-        const activeLocations = inventories.map((i) => i.location);
+        const activeLocations = inventories
+            .filter(i =>
+                (i.rawStock || 0) +
+                (i.inProcessing || 0) +
+                (i.finishedStock || 0) -
+                (i.orderedStock || 0) > 0
+            )
+            .map(i => i.location);
 
         await Product.findByIdAndUpdate(productId, {
             productLocation: activeLocations,
             inStock: activeLocations.length > 0,
         });
+
 
         res.json({
             success: true,
@@ -188,37 +193,55 @@ exports.moveFinishedToOrdered = async (req, res) => {
 exports.getAvailableProducts = async (req, res) => {
     try {
         const { location } = req.params;
-
         if (!location)
             return res
                 .status(400)
                 .json({ success: false, message: "Location is required" });
 
-        const inventory = await Inventory.find({
-            location,
-            $expr: {
-                $gt: [
-                    {
-                        $subtract: [
-                            { $add: ["$rawStock", "$inProcessing", "$finishedStock"] },
-                            "$orderedStock"
-                        ]
-                    },
-                    0
-                ]
-            }
-        }).populate("productId");
+        // Pull inventory with product info
+        const inventory = await Inventory.find({ location })
+            .populate("productId");
 
-        const products = inventory
-            .filter(i =>
-                i.productId &&
-                i.productId.productStatus === "Approved"
-            )
-            .map(i => ({
-                ...i.productId.toObject(),
-                availableQty:
-                    i.rawStock + i.inProcessing + i.finishedStock - i.orderedStock,
-            }));
+        const filtered = inventory.filter(i => {
+            if (!i.productId || i.productId.productStatus !== "Approved") return false;
+
+            const isGlasses = i.productId.cat_sec === "glasses";
+
+            const totalAvailable =
+                (i.rawStock || 0) +
+                (i.inProcessing || 0) +
+                (i.finishedStock || 0) -
+                (i.orderedStock || 0);
+
+            if (isGlasses) {
+                // glasses can use RAW
+                return totalAvailable > 0;
+            }
+
+            // others must have finished
+            const finishedAvailable =
+                (i.finishedStock || 0) - (i.orderedStock || 0);
+
+            return finishedAvailable > 0;
+        });
+
+        const products = filtered.map(i => {
+            const productObj = i.productId.toObject();
+            const isGlasses = productObj.cat_sec === "glasses";
+
+            // Calculate exact availability based on business rules
+            const totalAvailable = (i.rawStock || 0) + (i.inProcessing || 0) + (i.finishedStock || 0) - (i.orderedStock || 0);
+            const finishedAvailable = (i.finishedStock || 0) - (i.orderedStock || 0);
+
+            const availableQty = isGlasses ? totalAvailable : finishedAvailable;
+
+            return {
+                ...productObj,
+                inventory: [i], // Pass the inventory row so Frontend hasStockAtLocation works
+                availableQty: availableQty,
+                inStock: availableQty > 0
+            };
+        });
 
         res.json({ success: true, products });
 
@@ -230,3 +253,51 @@ exports.getAvailableProducts = async (req, res) => {
     }
 };
 
+
+
+
+
+
+exports.resyncProductStock = async (req, res) => {
+    try {
+        const inventories = await Inventory.find();
+
+        const grouped = {};
+
+        inventories.forEach(i => {
+            const pid = String(i.productId);
+
+            if (!grouped[pid]) grouped[pid] = [];
+
+            const available =
+                (i.rawStock || 0) +
+                (i.inProcessing || 0) +
+                (i.finishedStock || 0) -
+                (i.orderedStock || 0);
+
+            grouped[pid].push({
+                location: i.location,
+                available
+            });
+        });
+
+        for (const productId of Object.keys(grouped)) {
+            // Inside consumeForOrder
+            const inventories = await Inventory.find({ productId });
+            const activeLocations = inventories
+                .filter(i => ((i.rawStock || 0) + (i.inProcessing || 0) + (i.finishedStock || 0) - (i.orderedStock || 0)) > 0)
+                .map(i => i.location.toLowerCase().trim());
+
+            await Product.findByIdAndUpdate(productId, {
+                $set: {
+                    productLocation: activeLocations,
+                    inStock: activeLocations.length > 0
+                }
+            });
+        }
+
+        res.json({ success: true, message: "Products resynced." });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+};

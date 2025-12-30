@@ -116,7 +116,10 @@ exports.consumeForOrder = async ({ productId, location, quantity }) => {
     if (!inventory) throw new Error("Inventory not found");
 
     const totalAvailable =
-        inventory.rawStock + inventory.inProcessing + inventory.finishedStock - inventory.orderedStock;
+        (inventory.rawStock || 0) +
+        (inventory.inProcessing || 0) +
+        (inventory.finishedStock || 0) -
+        (inventory.orderedStock || 0);
 
     if (totalAvailable < quantity) throw new Error("Out of stock");
 
@@ -137,10 +140,29 @@ exports.consumeForOrder = async ({ productId, location, quantity }) => {
         remaining = 0;
     }
 
+    // reserve
     inventory.orderedStock += quantity;
 
     await inventory.save();
+
+    // 🔄 sync product stock after order (correct logic)
+    const inventories = await Inventory.find({ productId });
+
+    const activeLocations = inventories
+        .filter(i =>
+            (i.rawStock || 0) +
+            (i.inProcessing || 0) +
+            (i.finishedStock || 0) -
+            (i.orderedStock || 0) > 0
+        )
+        .map(i => i.location);
+
+    await Product.findByIdAndUpdate(productId, {
+        productLocation: activeLocations,
+        inStock: activeLocations.length > 0
+    });
 };
+
 
 
 /**

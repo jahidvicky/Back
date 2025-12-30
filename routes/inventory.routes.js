@@ -11,4 +11,7 @@ router.get(
     controller.getAvailableProducts
 );
 
+router.get("/resync-products", controller.resyncProductStock);
+
+
 module.exports = router;
