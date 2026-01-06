@@ -4,16 +4,15 @@ const paymentTemplate = require("../utils/paymentTemplate");
 const generateTrackingNumber = require("../utils/generateTrackingNumber");
 const productModel = require("../model/product-model");
 const dayjs = require("dayjs");
-const { verifyPayPalPayment } = require("../utils/paypal")
+const { verifyPayPalPayment } = require("../utils/paypal");
 const InventoryService = require("../services/inventory.service");
 const Inventory = require("../model/inventory-model");
 const InventoryHistory = require("../model/inventoryHistory-model");
 
-
-
 exports.createOrder = async (req, res) => {
   try {
-    const { email, cartItems, total, paymentMethod, transactionId, location } = req.body;
+    const { email, cartItems, total, paymentMethod, transactionId, location } =
+      req.body;
 
     if (!cartItems || cartItems.length === 0) {
       return res
@@ -36,7 +35,9 @@ exports.createOrder = async (req, res) => {
     // Verify payment if PayPal
     if (paymentMethod === "PayPal") {
       if (!transactionId)
-        return res.status(400).json({ success: false, message: "Transaction ID not found" });
+        return res
+          .status(400)
+          .json({ success: false, message: "Transaction ID not found" });
 
       const verified = await verifyPayPalPayment(transactionId);
 
@@ -64,7 +65,6 @@ exports.createOrder = async (req, res) => {
 
     const orderDate = new Date();
     const trackingNumber = generateTrackingNumber();
-
 
     const cartItemsWithDetails = await Promise.all(
       cartItems.map(async (item) => {
@@ -132,7 +132,6 @@ exports.createOrder = async (req, res) => {
       })
     );
 
-
     const orderData = {
       ...req.body,
       userId: req.user?.id || req.body.userId,
@@ -145,14 +144,19 @@ exports.createOrder = async (req, res) => {
     };
 
     for (const item of cartItemsWithDetails) {
-      await InventoryService.consumeForOrder({
-        productId: item.productId,
-        location,
-        quantity: item.quantity
-      });
+      try {
+        await InventoryService.consumeForOrder({
+          productId: item.productId,
+          location,
+          quantity: item.quantity,
+        });
+      } catch (err) {
+        return res.status(400).json({
+          success: false,
+          message: "This item was just sold out. Please refresh and try again.",
+        });
+      }
     }
-
-
 
     const order = new Order(orderData);
     await order.save();
@@ -161,10 +165,8 @@ exports.createOrder = async (req, res) => {
       location: order.location,
       orderId: order._id,
       quantity: order.cartItems.reduce((t, i) => t + i.quantity, 0),
-      performedBy: order.email
+      performedBy: order.email,
     });
-
-
 
     try {
       await transporter.sendMail({
@@ -258,9 +260,6 @@ exports.updateOrderStatus = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-
-
 
 exports.cancleOrder = async (req, res) => {
   try {
@@ -369,7 +368,6 @@ exports.cancleOrder = async (req, res) => {
   }
 };
 
-
 exports.getOrderTracking = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -460,11 +458,9 @@ exports.getAllOrders = async (req, res) => {
 
 exports.getAllVendorOrders = async (req, res) => {
   try {
-
     // Fetch all orders
 
     const vendorId = req.user._id;
-
 
     const orders = await Order.find({
       "cartItems.vendorID": vendorId,
@@ -498,36 +494,49 @@ exports.getOrderHistory = async (req, res) => {
   }
 };
 
-
 exports.renewPolicy = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { policyId } = req.body;
 
     const order = await Order.findById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order)
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
 
     // Find the cart item by policyId
     const cartItemIndex = order.cartItems.findIndex(
-      (item) => item.policy && (item.policy._id?.toString() === policyId || item.policy.policyId === policyId)
+      (item) =>
+        item.policy &&
+        (item.policy._id?.toString() === policyId ||
+          item.policy.policyId === policyId)
     );
 
     if (cartItemIndex === -1)
-      return res.status(404).json({ success: false, message: "Policy not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Policy not found" });
 
     const oldPolicy = order.cartItems[cartItemIndex].policy;
     const today = new Date();
     const durationDays = oldPolicy.durationDays || 1;
 
     // Save old policy in previousPolicies
-    order.cartItems[cartItemIndex].previousPolicies = order.cartItems[cartItemIndex].previousPolicies || [];
-    order.cartItems[cartItemIndex].previousPolicies.push({ ...oldPolicy, renewedAt: today });
+    order.cartItems[cartItemIndex].previousPolicies =
+      order.cartItems[cartItemIndex].previousPolicies || [];
+    order.cartItems[cartItemIndex].previousPolicies.push({
+      ...oldPolicy,
+      renewedAt: today,
+    });
 
     // Create new renewed policy
     order.cartItems[cartItemIndex].policy = {
       ...oldPolicy,
       purchasedAt: today,
-      expiryDate: new Date(today.getTime() + durationDays * 24 * 60 * 60 * 1000),
+      expiryDate: new Date(
+        today.getTime() + durationDays * 24 * 60 * 60 * 1000
+      ),
       status: "Active",
       active: true,
       paymentStatus: "Paid",
@@ -544,9 +553,6 @@ exports.renewPolicy = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-
-
 
 exports.payPolicy = async (req, res) => {
   try {
