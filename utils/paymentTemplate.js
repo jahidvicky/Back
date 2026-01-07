@@ -54,7 +54,7 @@ function paymentTemplate(order) {
             <td style="padding:8px; border:1px solid #ddd;">
               <b>${item.name}</b><br/>
 
-              <img src="${item.image}" width="80" style="margin-top:5px; border-radius:6px;" />
+              <img src=${item.image} alt=${item.name} width="80" style="margin-top:5px; border-radius:6px;" />
 
               <!-- PRODUCT DETAILS -->
               <div style="margin-top:8px; font-size:13px; color:#555;">
