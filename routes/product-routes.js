@@ -98,10 +98,4 @@ router.put(
 //  REJECT PRODUCT (Admin)
 router.put("/products/reject/:id", productController.rejectProduct);
 
-//  APPLY DISCOUNT (Vendor)
-router.put(
-  "/vendor-products/:productId/discount",
-  productController.applyVendorDiscount
-);
-
 module.exports = router;

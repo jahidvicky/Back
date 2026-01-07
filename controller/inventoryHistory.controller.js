@@ -5,12 +5,16 @@ const InventoryHistory = require("../model/inventoryHistory-model");
 exports.getInventoryHistory = async (req, res) => {
   try {
     const { productId } = req.params;
-    const { location } = req.query;
+    const { location, vendorId } = req.query;
 
     const filter = { productId };
 
     if (location) {
       filter.location = location;
+    }
+
+    if (vendorId) {
+      filter.performedBy = vendorId;
     }
 
     const history = await InventoryHistory.find(filter)
@@ -25,5 +29,6 @@ exports.getInventoryHistory = async (req, res) => {
     });
   }
 };
+
 
 

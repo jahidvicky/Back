@@ -202,7 +202,9 @@ const addProduct = async (req, res) => {
 const getAllProducts = async (req, res) => {
   try {
     const { search, category, subCategory } = req.query;
-    let query = {};
+    let query = {
+      productStatus: "Approved",        // <<< IMPORTANT
+    };
 
     // Search filter
     if (search) {
@@ -217,7 +219,7 @@ const getAllProducts = async (req, res) => {
     if (category) query.cat_sec = category;
     if (subCategory) query.subCategoryName = subCategory;
 
-    // Status filter (AND with others)
+    // Status filter
     const statusFilter = {
       $or: [
         { productStatus: "Approved" },
@@ -225,14 +227,13 @@ const getAllProducts = async (req, res) => {
       ],
     };
 
-    // Combine search/category filters and status filter
+    // Combine filters
     if (Object.keys(query).length > 0) {
       query = { $and: [query, statusFilter] };
     } else {
       query = statusFilter;
     }
 
-    // Final query
     const products = await Product.find(query).sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -248,6 +249,7 @@ const getAllProducts = async (req, res) => {
     });
   }
 };
+
 
 const getVendorProducts = async (req, res) => {
   try {
@@ -642,19 +644,20 @@ const updateVendorProduct = async (req, res) => {
       Restrict Fields When Approved
     ------------------------------------------------ */
     if (status === "Approved") {
-      // Vendor can only change: price, sale price, discount, stock, images & packs
+      // Vendor can only change price, sale price, stock, images & packs
       const allowedApprovedFields = [
         "product_price",
         "product_sale_price",
-        "discountValue",
-        "discountType",
-        "stockAvailability",
         "product_variants",
         "product_lens_image1",
         "product_lens_image2",
         "contactLens_packs",
         "colorData",
+        "isBestSeller",
+        "isTrending",
+        "removedImages"
       ];
+
 
       const disallowedFields = Object.keys(updateData).filter(
         (key) => !allowedApprovedFields.includes(key)
@@ -669,12 +672,13 @@ const updateVendorProduct = async (req, res) => {
         });
       }
 
-      // Product goes back to Pending and vendor must send for approval again
-      updateData.productStatus = "Pending";
-      updateData.isResubmitted = true;
-      updateData.isSentForApproval = false;
-      updateData.rejectionReason = undefined;
+      // IMPORTANT: Do NOT change product status if already approved
+      delete updateData.productStatus;
+      delete updateData.isResubmitted;
+      delete updateData.isSentForApproval;
+      // rejectionReason remains untouched
     }
+
 
     /* ------------------------------------------------
       Rejected → Vendor can edit everything (but stays Rejected until re-sent)
@@ -788,10 +792,25 @@ const getProductsByCategoryAndSub = async (req, res) => {
 const searchProducts = async (req, res) => {
   try {
     const { search } = req.query;
-    let query = {};
-    if (search) query.product_name = { $regex: search, $options: "i" };
+
+    // Base filter
+    let query = {
+      productStatus: "Approved",
+    };
+
+    // Text search
+    if (search) {
+      query.product_name = { $regex: search, $options: "i" };
+    }
+
+    // Status filter (optional but recommended)
+    query.$or = [
+      { productStatus: "Approved" },
+      { productStatus: { $exists: false } }
+    ];
 
     const products = await Product.find(query).limit(20);
+
     return res.status(200).json({
       success: true,
       count: products.length,
@@ -805,6 +824,7 @@ const searchProducts = async (req, res) => {
     });
   }
 };
+
 
 // Get products by SubCategory ID
 const getProductBySubCatId = async (req, res) => {
@@ -880,68 +900,16 @@ const getProductByCatId = async (req, res) => {
   }
 };
 
-const applyVendorDiscount = async (req, res) => {
-  try {
-    const { productId } = req.params;
-    const { discountType, discountValue, discountedPrice } = req.body;
-
-    if (!discountType || discountValue === undefined) {
-      return res.status(400).json({
-        success: false,
-        message: "Both discount type and value are required.",
-      });
-    }
-
-    if (!["percentage", "flat"].includes(discountType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Discount type must be 'percentage' or 'flat'.",
-      });
-    }
-
-    const numericDiscount = parseFloat(discountValue);
-    if (isNaN(numericDiscount) || numericDiscount < 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Discount value must be a valid positive number.",
-      });
-    }
-
-    // Find product
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({
-        success: false,
-        message: "Product not found.",
-      });
-    }
-
-    // Update only discount info (do NOT overwrite sale price)
-    product.discountType = discountType;
-    product.discountValue = numericDiscount;
-    product.discountedPrice = discountedPrice;
-
-    await product.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "Discount added successfully.",
-      discountType: product.discountType,
-      discountValue: product.discountValue,
-      discountedPrice: product.discountedPrice,
-    });
-  } catch (error) {
-    console.error("Error in applyVendorDiscount:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Server error while adding discount.",
-    });
-  }
-};
-
 const getBestSellerProducts = async (req, res) => {
   try {
-    const products = await Product.find({ isBestSeller: true });
+    const products = await Product.find({
+      isBestSeller: true,
+      productStatus: "Approved",
+      $or: [
+        { productStatus: "Approved" },
+        { productStatus: { $exists: false } }
+      ]
+    }).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -954,10 +922,18 @@ const getBestSellerProducts = async (req, res) => {
     });
   }
 };
+
 
 const getTrendingProducts = async (req, res) => {
   try {
-    const products = await Product.find({ isTrending: true });
+    const products = await Product.find({
+      isTrending: true,
+      productStatus: "Approved",
+      $or: [
+        { productStatus: "Approved" },
+        { productStatus: { $exists: false } }
+      ]
+    }).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -966,10 +942,11 @@ const getTrendingProducts = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       success: false,
-      message: "Failed to fetch best seller products",
+      message: "Failed to fetch trending products",
     });
   }
 };
+
 
 const getProductsByBrandId = async (req, res) => {
   try {
@@ -1036,7 +1013,6 @@ module.exports = {
   sendApprovedProduct,
   rejectProduct,
   updateVendorProduct,
-  applyVendorDiscount,
   getProductsByBrandId,
   getBestSellerProducts,
   getTrendingProducts,

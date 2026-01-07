@@ -8,7 +8,7 @@ const InventoryHistory = require("../model/inventoryHistory-model");
  * - Glasses → RAW
  * - Sunglasses / Contact Lens → FINISHED
  */
-exports.addRawStock = async ({ productId, location, quantity }) => {
+exports.addRawStock = async ({ productId, location, quantity, createdBy, vendorId }) => {
   if (!productId || !location || quantity <= 0) {
     throw new Error("Invalid inventory input");
   }
@@ -26,48 +26,30 @@ exports.addRawStock = async ({ productId, location, quantity }) => {
       location,
       category: product.cat_sec,
       rawStock: requiresLab ? quantity : 0,
+      vendorId: vendorId || null,
       inProcessing: 0,
       finishedStock: requiresLab ? 0 : quantity,
       itemCode: generateItemCode({ location, category: product.cat_sec }),
+      createdBy
     });
   } else {
-    if (requiresLab) {
-      inventory.rawStock += quantity;
-    } else {
-      inventory.finishedStock += quantity;
-    }
+    if (requiresLab) inventory.rawStock += quantity;
+    else inventory.finishedStock += quantity;
 
     await inventory.save();
   }
-
-  const normalizedLocation = location.toLowerCase();
-
-  let locs = Array.isArray(product.productLocation)
-    ? product.productLocation
-    : product.productLocation
-    ? [product.productLocation]
-    : [];
-
-  if (!locs.includes(normalizedLocation)) locs.push(normalizedLocation);
-
-  await Product.findByIdAndUpdate(productId, {
-    $inc: { availableStock: quantity },
-    $set: {
-      inStock: true,
-      productLocation: locs,
-    },
-  });
 
   await InventoryHistory.create({
     action: "stock_added",
     location,
     productId,
     quantity,
-    performedBy: "admin",
+    performedBy: createdBy || "admin"
   });
 
   return inventory;
 };
+
 
 /**
  * RAW → PROCESSING (Send to Lab)
@@ -108,18 +90,25 @@ exports.receiveFromLab = async ({ productId, location, quantity }) => {
  * 1) use finished if available
  * 2) otherwise consume raw
  */
-exports.consumeForOrder = async ({ productId, location, quantity }) => {
+exports.consumeForOrder = async ({ productId, location, quantity, vendorId }) => {
+
+  // find the specific owner inventory row
   const inventory = await Inventory.findOne({ productId, location });
+
   if (!inventory) throw new Error("Inventory not found");
+
+  // prevent vendor touching another vendor's stock
+  if (vendorId && inventory.createdBy !== vendorId) {
+    throw new Error("Unauthorized inventory access");
+  }
 
   const isGlasses = inventory.category === "glasses";
 
- const available = isGlasses
-  ? (inventory.rawStock || 0) +
+  const available = isGlasses
+    ? (inventory.rawStock || 0) +
     (inventory.inProcessing || 0) +
     (inventory.finishedStock || 0)
-  : (inventory.finishedStock || 0);
-
+    : (inventory.finishedStock || 0);
 
   if (available < quantity) throw new Error("Out of stock");
 
@@ -132,9 +121,7 @@ exports.consumeForOrder = async ({ productId, location, quantity }) => {
   }
 
   if (remaining > 0) {
-    if (!isGlasses) {
-      throw new Error("Finished stock required");
-    }
+    if (!isGlasses) throw new Error("Finished stock required");
     inventory.rawStock -= remaining;
   }
 
@@ -143,21 +130,21 @@ exports.consumeForOrder = async ({ productId, location, quantity }) => {
 
   // sync product locations
   const inventories = await Inventory.find({ productId });
- const activeLocations = inventories
-  .filter(i => {
-    const isGlasses = i.category === "glasses";
 
-    const available = isGlasses
-      ? (i.rawStock || 0) +
+  const activeLocations = inventories
+    .filter(i => {
+      const isGlasses = i.category === "glasses";
+
+      const available = isGlasses
+        ? (i.rawStock || 0) +
         (i.inProcessing || 0) +
         (i.finishedStock || 0) -
         (i.orderedStock || 0)
-      : (i.finishedStock || 0); //  ONLY finished
+        : (i.finishedStock || 0);
 
-    return available > 0;
-  })
-  .map(i => i.location.toLowerCase().trim());
-
+      return available > 0;
+    })
+    .map(i => i.location.toLowerCase().trim());
 
   await Product.findByIdAndUpdate(productId, {
     productLocation: activeLocations,
@@ -168,11 +155,13 @@ exports.consumeForOrder = async ({ productId, location, quantity }) => {
 /**
  * FINISHED → SOLD
  */
-exports.sellItem = async ({ productId, location, quantity }) => {
+exports.sellItem = async ({ productId, location, quantity, vendorId }) => {
   const inventory = await Inventory.findOne({ productId, location });
 
-  if (!inventory) {
-    throw new Error("Inventory not found");
+  if (!inventory) throw new Error("Inventory not found");
+
+  if (vendorId && inventory.createdBy !== vendorId) {
+    throw new Error("Unauthorized inventory access");
   }
 
   const totalAvailable =
@@ -185,49 +174,52 @@ exports.sellItem = async ({ productId, location, quantity }) => {
     throw new Error("Out of stock");
   }
 
-  // Reserve inventory
   inventory.orderedStock += quantity;
-
   await inventory.save();
 };
 
 /**
  * VALIDATE BEFORE ORDER
  */
-exports.validateFinishedStock = async ({ productId, location, quantity }) => {
+exports.validateFinishedStock = async ({ productId, location, quantity, vendorId }) => {
   const inventory = await Inventory.findOne({ productId, location });
 
   if (!inventory) throw new Error("Inventory not found");
 
+  if (vendorId && inventory.createdBy !== vendorId) {
+    throw new Error("Unauthorized inventory access");
+  }
+
   const isGlasses = inventory.category === "glasses";
 
- const available = isGlasses
-  ? (inventory.rawStock || 0) +
+  const available = isGlasses
+    ? (inventory.rawStock || 0) +
     (inventory.inProcessing || 0) +
     (inventory.finishedStock || 0)
-  : (inventory.finishedStock || 0);
+    : (inventory.finishedStock || 0);
 
-
-  if (available < quantity) {
-    throw new Error("Out of stock");
-  }
+  if (available < quantity) throw new Error("Out of stock");
 
   return true;
 };
 
-exports.rollbackStock = async ({ productId, location, quantity }) => {
+
+exports.rollbackStock = async ({ productId, location, quantity, vendorId }) => {
   const inventory = await Inventory.findOne({ productId, location });
 
   if (!inventory) return;
 
+  if (vendorId && inventory.createdBy !== vendorId) {
+    return; // silently ignore, not your stock
+  }
+
   const isGlasses = inventory.category === "glasses";
 
-  // Undo reservation
   inventory.orderedStock -= quantity;
   if (inventory.orderedStock < 0) inventory.orderedStock = 0;
 
-  // Return stock to FINISHED (safe rollback)
   inventory.finishedStock += quantity;
 
   await inventory.save();
 };
+

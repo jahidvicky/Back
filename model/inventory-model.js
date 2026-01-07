@@ -18,7 +18,12 @@ const inventorySchema = new mongoose.Schema(
             enum: ["sunglasses", "glasses", "contact_lenses"],
             required: true,
         },
-
+        createdBy: { type: String },
+        vendorId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            default: null,
+        },
         location: {
             type: String,
             enum: ["east", "west"],

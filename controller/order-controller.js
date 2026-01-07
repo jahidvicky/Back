@@ -6,7 +6,7 @@ const productModel = require("../model/product-model");
 const dayjs = require("dayjs");
 const { verifyPayPalPayment } = require("../utils/paypal");
 const InventoryService = require("../services/inventory.service");
-const Inventory = require("../model/inventory-model");
+// const Inventory = require("../model/inventory-model");
 const InventoryHistory = require("../model/inventoryHistory-model");
 
 exports.createOrder = async (req, res) => {
@@ -149,6 +149,7 @@ exports.createOrder = async (req, res) => {
           productId: item.productId,
           location,
           quantity: item.quantity,
+          vendorId: item.createdBy || item.vendorID || null
         });
       } catch (err) {
         return res.status(400).json({
@@ -157,6 +158,7 @@ exports.createOrder = async (req, res) => {
         });
       }
     }
+
 
     const order = new Order(orderData);
     await order.save();

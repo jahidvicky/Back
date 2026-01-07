@@ -7,7 +7,13 @@ const InventoryHistory = require("../model/inventoryHistory-model");
 ============================ */
 exports.addStock = async (req, res) => {
   try {
-    const inventory = await InventoryService.addRawStock(req.body);
+    const payload = {
+      ...req.body,
+      createdBy: req.body.vendorId || "admin"
+    };
+
+    const inventory = await InventoryService.addRawStock(payload);
+
     res.json({ success: true, inventory });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -19,39 +25,58 @@ exports.addStock = async (req, res) => {
 ============================ */
 exports.getInventoryList = async (req, res) => {
   try {
-    const inventory = await Inventory.find()
-      .populate("productId", "product_name")
+    const { vendorId, createdBy } = req.query;
+
+    const filter = {};
+
+    // Vendor inventory
+    if (vendorId) {
+      filter.vendorId = vendorId;
+    }
+
+    // Admin-only inventory
+    if (createdBy === "admin") {
+      filter.createdBy = "admin";
+    }
+
+    const inventory = await Inventory.find(filter)
+      .populate("productId", "product_name product_variants createdBy")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, inventory });
   } catch (err) {
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch inventory" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch inventory",
+    });
   }
 };
+
+
 
 /* ============================
    MOVE TO PROCESSING
 ============================ */
 exports.moveToProcessing = async (req, res) => {
   try {
-    const { inventoryId, quantity } = req.body;
+    const { inventoryId, quantity, vendorId } = req.body;
+
     const inventory = await Inventory.findById(inventoryId);
     if (!inventory)
-      return res
-        .status(404)
-        .json({ success: false, message: "Inventory not found" });
+      return res.status(404).json({ success: false, message: "Inventory not found" });
+
+    if (vendorId && inventory.createdBy !== vendorId) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
 
     if (inventory.orderedStock < quantity)
       return res.status(400).json({
         success: false,
-        message: "Not enough ordered stock",
+        message: "Not enough ordered stock"
       });
 
     inventory.orderedStock -= quantity;
     inventory.inProcessing += quantity;
-    inventory.status = "Processing";
 
     await inventory.save();
 
@@ -60,7 +85,7 @@ exports.moveToProcessing = async (req, res) => {
       location: inventory.location,
       productId: inventory.productId,
       quantity,
-      performedBy: "admin",
+      performedBy: vendorId || "admin"
     });
 
     res.json({ success: true, message: "Moved to processing", inventory });
@@ -69,41 +94,41 @@ exports.moveToProcessing = async (req, res) => {
   }
 };
 
+
 /* ============================
    MOVE TO FINISHED
 ============================ */
 exports.moveToFinished = async (req, res) => {
   try {
-    const { inventoryId, quantity, location } = req.body;
+    const { inventoryId, quantity, location, vendorId } = req.body;
 
     const inventory = await Inventory.findById(inventoryId);
     if (!inventory)
-      return res
-        .status(404)
-        .json({ success: false, message: "Inventory not found" });
+      return res.status(404).json({ success: false, message: "Inventory not found" });
+
+    if (vendorId && inventory.createdBy !== vendorId) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
 
     if (inventory.inProcessing < quantity)
       return res.status(400).json({
         success: false,
-        message: "Not enough processing stock",
+        message: "Not enough processing stock"
       });
 
     inventory.inProcessing -= quantity;
     inventory.finishedStock += quantity;
 
-    if (inventory.rawStock === 0 && inventory.inProcessing === 0)
-      inventory.status = "Finished";
-
     await inventory.save();
+
     await InventoryHistory.create({
       action: "moved_finished",
       location: inventory.location,
       productId: inventory.productId,
       quantity,
-      performedBy: "admin",
+      performedBy: vendorId || "admin"
     });
 
-    /*  UPDATE PRODUCT LOCATIONS (MERGE, NEVER OVERWRITE) */
     const normalizedLocation = (location || "").toLowerCase();
     const product = await Product.findById(inventory.productId);
 
@@ -111,27 +136,23 @@ exports.moveToFinished = async (req, res) => {
       let locs = Array.isArray(product.productLocation)
         ? product.productLocation
         : product.productLocation
-        ? [product.productLocation.toLowerCase()]
-        : [];
+          ? [product.productLocation.toLowerCase()]
+          : [];
 
       if (!locs.includes(normalizedLocation)) locs.push(normalizedLocation);
 
       await Product.findByIdAndUpdate(inventory.productId, {
-        $set: { inStock: true, productLocation: locs },
+        $set: { inStock: true, productLocation: locs }
       });
     }
 
     res.json({
       success: true,
       message: "Moved to finished stock and product updated",
-      inventory,
+      inventory
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({
-      success: false,
-      message: err.message || "Server error",
-    });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
 
@@ -140,52 +161,38 @@ exports.moveToFinished = async (req, res) => {
 ============================ */
 exports.moveFinishedToOrdered = async (req, res) => {
   try {
-    const { productId, location, quantity } = req.body;
+    const { productId, location, quantity, vendorId } = req.body;
 
     const inventory = await Inventory.findOne({
       productId,
       location,
-      finishedStock: { $gte: quantity },
+      finishedStock: { $gte: quantity }
     });
 
     if (!inventory)
       return res.status(404).json({
         success: false,
-        message: "No finished stock available",
+        message: "No finished stock available"
       });
+
+    if (vendorId && inventory.createdBy !== vendorId) {
+      return res.status(403).json({ success: false, message: "Unauthorized" });
+    }
 
     inventory.finishedStock -= quantity;
     inventory.orderedStock += quantity;
 
     await inventory.save();
 
-    /*  SYNC PRODUCT LOCATIONS (real available stock) */
-    const inventories = await Inventory.find({ productId });
-
-    const activeLocations = inventories
-      .filter((i) => {
-        const isGlasses = i.category === "glasses";
-
-        const available = isGlasses
-          ? (i.rawStock || 0) +
-            (i.inProcessing || 0) +
-            (i.finishedStock || 0) -
-            (i.orderedStock || 0)
-          : i.finishedStock || 0; 
-
-        return available > 0;
-      })
-      .map((i) => i.location.toLowerCase().trim());
-
-    await Product.findByIdAndUpdate(productId, {
-      productLocation: activeLocations,
-      inStock: activeLocations.length > 0,
+    await InventoryHistory.create({
+      action: "order_placed",
+      productId,
+      location,
+      quantity,
+      performedBy: vendorId || "admin"
     });
 
-    res.json({
-      success: true,
-      message: "Moved to ordered stock",
-    });
+    res.json({ success: true, message: "Moved to ordered stock" });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -293,10 +300,10 @@ exports.resyncProductStock = async (req, res) => {
 
           const available = isGlasses
             ? (i.rawStock || 0) +
-              (i.inProcessing || 0) +
-              (i.finishedStock || 0) -
-              (i.orderedStock || 0)
-            : i.finishedStock || 0; 
+            (i.inProcessing || 0) +
+            (i.finishedStock || 0) -
+            (i.orderedStock || 0)
+            : i.finishedStock || 0;
           return available > 0;
         })
         .map((i) => i.location.toLowerCase().trim());
