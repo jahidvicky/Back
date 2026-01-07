@@ -261,6 +261,7 @@ exports.updateOrderStatus = async (req, res) => {
   }
 };
 
+
 exports.cancleOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
@@ -281,7 +282,9 @@ exports.cancleOrder = async (req, res) => {
       });
     }
 
-    // If specific product is cancelled
+    // ─────────────────────────────
+    // PRODUCT LEVEL CANCELLATION
+    // ─────────────────────────────
     if (productId) {
       const product = order.cartItems.find(
         (item) => item._id.toString() === productId
@@ -301,28 +304,24 @@ exports.cancleOrder = async (req, res) => {
         });
       }
 
-      // Mark product as cancelled
+      // Cancel only the product
       product.status = "Cancelled";
 
-      // Add tracking entry
-      order.trackingHistory.push({
-        status: "Cancelled",
-        message: `Product '${product.name}' cancelled by customer`,
-        updatedBy: "Customer",
-        actorName: "Customer",
-        updatedAt: new Date(),
-      });
 
-      // Check if all products are now cancelled
+      // Check if all products are cancelled
       const allCancelled = order.cartItems.every(
         (item) => item.status === "Cancelled"
       );
 
-      if (allCancelled) {
+      // ─────────────────────────────
+      // ORDER LEVEL CANCELLATION (ONLY ONCE)
+      // ─────────────────────────────
+      if (allCancelled && order.orderStatus !== "Cancelled") {
         order.orderStatus = "Cancelled";
+
         order.trackingHistory.push({
           status: "Cancelled",
-          message: "All products cancelled. Entire order marked as cancelled.",
+          message: "Order cancelled (Product cancelled)",
           updatedBy: "System",
           actorName: "System",
           updatedAt: new Date(),
@@ -334,22 +333,28 @@ exports.cancleOrder = async (req, res) => {
       return res.status(200).json({
         success: true,
         message: allCancelled
-          ? "All products cancelled, order marked as Cancelled."
+          ? "Product cancelled. Order marked as cancelled."
           : `Product '${product.name}' cancelled successfully.`,
         order,
       });
     }
 
-    // Else — cancel full order directly
+    // ─────────────────────────────
+    // FULL ORDER CANCELLATION
+    // ─────────────────────────────
     order.cartItems.forEach((item) => (item.status = "Cancelled"));
-    order.orderStatus = "Cancelled";
-    order.trackingHistory.push({
-      status: "Cancelled",
-      message: "Order cancelled by customer",
-      updatedBy: "Customer",
-      actorName: "Customer",
-      updatedAt: new Date(),
-    });
+
+    if (order.orderStatus !== "Cancelled") {
+      order.orderStatus = "Cancelled";
+
+      order.trackingHistory.push({
+        status: "Cancelled",
+        message: "Order cancelled by customer",
+        updatedBy: "Customer",
+        actorName: "Customer",
+        updatedAt: new Date(),
+      });
+    }
 
     await order.save();
 
@@ -363,10 +368,10 @@ exports.cancleOrder = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Internal server error",
-      error: error.message,
     });
   }
 };
+
 
 exports.getOrderTracking = async (req, res) => {
   try {
