@@ -692,7 +692,7 @@ exports.requestExchange = async (req, res) => {
     item.exchangeRequestedAt = new Date();
 
     order.trackingHistory.push({
-      status: order.orderStatus, // enum safe
+      status: order.orderStatus,
       message: `Exchange requested for ${item.name}`,
       updatedAt: new Date(),
     });
