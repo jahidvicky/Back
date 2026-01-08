@@ -8,6 +8,7 @@ const { verifyPayPalPayment } = require("../utils/paypal");
 const InventoryService = require("../services/inventory.service");
 // const Inventory = require("../model/inventory-model");
 const InventoryHistory = require("../model/inventoryHistory-model");
+const sendEmail = require("../utils/sendEmail");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -161,6 +162,7 @@ exports.createOrder = async (req, res) => {
 
 
     const order = new Order(orderData);
+    console.log(orderData);
     await order.save();
     await InventoryHistory.create({
       action: "order_placed",
@@ -599,3 +601,280 @@ exports.payPolicy = async (req, res) => {
       .json({ success: false, message: "Failed to pay for policy" });
   }
 };
+
+
+// ===============================
+// USER REQUEST EXCHANGE
+// =============================
+
+exports.getExchangeRequests = async (req, res) => {
+  try {
+    const orders = await Order.find({
+      "cartItems.exchangeStatus": {
+        $in: ["Requested", "Approved", "Completed"],
+      },
+    })
+      .select("_id email cartItems createdAt")
+      .sort({ createdAt: -1 });
+
+    const filteredOrders = orders.map((order) => {
+      const items = order.cartItems.filter((item) =>
+        ["Requested", "Approved", "Completed"].includes(item.exchangeStatus)
+      );
+
+      return {
+        ...order.toObject(),
+        cartItems: items,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      orders: filteredOrders,
+    });
+  } catch (error) {
+    console.error("Get exchange requests error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch exchange requests",
+    });
+  }
+};
+
+
+
+
+exports.requestExchange = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { productId, reason } = req.body;
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const item = order.cartItems.id(productId);
+    if (!item) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+
+    // Safety checks
+    if (order.orderStatus !== "Delivered") {
+      return res.status(400).json({ message: "Order not delivered" });
+    }
+
+    if (!order.deliveryDate) {
+      return res.status(400).json({ message: "Delivery date missing" });
+    }
+
+    if (item.exchangeStatus && item.exchangeStatus !== "None") {
+      return res.status(400).json({ message: "Exchange already requested" });
+    }
+
+    // 48-hour rule
+    const diffHours =
+      (Date.now() - new Date(order.deliveryDate).getTime()) /
+      (1000 * 60 * 60);
+
+    if (diffHours > 48) {
+      return res.status(400).json({ message: "Exchange window expired" });
+    }
+
+    // Save images
+    const images = req.files?.length
+      ? req.files.map(file => `${file.filename}`)
+      : [];
+
+    item.exchangeStatus = "Requested";
+    item.exchangeReason = reason;
+    item.exchangeImages = images;
+    item.exchangeRequestedAt = new Date();
+
+    order.trackingHistory.push({
+      status: order.orderStatus, // enum safe
+      message: `Exchange requested for ${item.name}`,
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Exchange request submitted",
+      order,
+    });
+  } catch (err) {
+    console.error("Exchange error:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+
+
+//-----------------------admin exchnage approve function-------------------------------------------
+exports.approveExchange = async (req, res) => {
+  try {
+    const { orderId, productId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order)
+      return res.status(404).json({ message: "Order not found" });
+
+    const item = order.cartItems.id(productId);
+    if (!item)
+      return res.status(404).json({ message: "Item not found" });
+
+    if (item.exchangeStatus !== "Requested")
+      return res.status(400).json({ message: "Invalid exchange state" });
+
+    item.exchangeStatus = "Approved";
+    item.exchangeApprovedAt = new Date();
+
+    order.trackingHistory.push({
+      status: order.orderStatus,
+      message: `Exchange approved for ${item.name}`,
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Exchange approved",
+      order,
+    });
+
+    // email (safe)
+    try {
+      await sendEmail({
+        to: order.email,
+        subject: "Exchange Approved",
+        html: `
+          <h2>Exchange Approved</h2>
+          <p>Your exchange request for <b>${item.name}</b> has been approved.</p>
+          <p>We will notify you once the exchange is completed.</p>
+        `,
+      });
+    } catch (e) {
+      console.error("Approve exchange email failed:", e.message);
+    }
+  } catch (error) {
+    console.error("Approve exchange error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+
+exports.rejectExchange = async (req, res) => {
+  try {
+    const { orderId, productId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order)
+      return res.status(404).json({ message: "Order not found" });
+
+    const item = order.cartItems.id(productId);
+    if (!item)
+      return res.status(404).json({ message: "Item not found" });
+
+    if (item.exchangeStatus !== "Requested")
+      return res.status(400).json({ message: "Invalid exchange state" });
+
+    item.exchangeStatus = "Rejected";
+    item.exchangeRejectedAt = new Date();
+
+    order.trackingHistory.push({
+      status: order.orderStatus,
+      message: `Exchange rejected for ${item.name}`,
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Exchange rejected",
+      order,
+    });
+
+    try {
+      await sendEmail({
+        to: order.email,
+        subject: "Exchange Rejected",
+        html: `
+          <h2>Exchange Rejected</h2>
+          <p>Your exchange request for <b>${item.name}</b> was rejected.</p>
+        `,
+      });
+    } catch (e) {
+      console.error("Reject exchange email failed:", e.message);
+    }
+  } catch (error) {
+    console.error("Reject exchange error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+
+
+
+
+exports.completeExchange = async (req, res) => {
+  try {
+    const { orderId, productId } = req.params;
+
+    const order = await Order.findById(orderId);
+    if (!order)
+      return res.status(404).json({ message: "Order not found" });
+
+    const item = order.cartItems.id(productId);
+    if (!item)
+      return res.status(404).json({ message: "Product not found" });
+
+    if (item.exchangeStatus !== "Approved")
+      return res.status(400).json({ message: "Exchange must be approved first" });
+
+    item.exchangeStatus = "Completed";
+    item.exchangeCompletedAt = new Date();
+
+    order.trackingHistory.push({
+      status: order.orderStatus, // ✅ enum safe
+      message: `Exchange completed for ${item.name}`,
+      updatedBy: "Admin",
+      actorName: req.user?.name || "Admin",
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    res.json({
+      success: true,
+      message: "Exchange marked as completed",
+      order,
+    });
+
+    try {
+      await sendEmail({
+        to: order.email,
+        subject: "Exchange Completed",
+        html: `
+          <h2>Exchange Completed 🎉</h2>
+          <p>Your exchange for <b>${item.name}</b> has been completed.</p>
+        `,
+      });
+    } catch (e) {
+      console.error("Complete exchange email failed:", e.message);
+    }
+  } catch (error) {
+    console.error("Complete exchange error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+

@@ -7,6 +7,7 @@ const orderSchema = new mongoose.Schema(
       ref: "Customer",
       required: true,
     },
+
     email: { type: String, required: true },
 
     location: {
@@ -15,42 +16,68 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
-    //  Updated cartItems structure with color variant support
+    // =========================
+    // CART ITEMS
+    // =========================
     cartItems: [
       {
         productId: String,
         name: String,
 
-        //  Images
-        image: String,           // Primary image (first image of selected color)
-        variantImages: [String], // All images of that selected color variant
+        // Images
+        image: String,
+        variantImages: [String],
 
         price: Number,
         subCategoryName: String,
         quantity: { type: Number, default: 1 },
+
         createdBy: { type: String },
+
         vendorID: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "Vendor",
         },
-        categoryId: {
-          type: String
-        },
 
-        //  Per-item selections
+        categoryId: String,
+
+        // Selections
         product_size: [String],
         product_color: [String],
         lens: Object,
         enhancement: Object,
         thickness: Object,
         tint: Object,
+
         status: {
           type: String,
           enum: ["Active", "Cancelled"],
           default: "Active",
         },
 
-        //  Policy (insurance) data
+        // =========================
+        // 🔁 EXCHANGE LOGIC (NEW)
+        // =========================
+        isPrescription: {
+          type: Boolean,
+          default: false, // important for sunglasses
+        },
+        exchangeImages: [String],
+
+        exchangeStatus: {
+          type: String,
+          enum: ["None", "Requested", "Approved", "Rejected", "Completed"],
+          default: "None",
+        },
+
+        exchangeReason: String,
+        exchangeRequestedAt: Date,
+        exchangeApprovedAt: Date,
+        exchangeCompletedAt: Date,
+
+        // =========================
+        // POLICY (INSURANCE)
+        // =========================
         policy: {
           policyId: { type: String },
           name: String,
@@ -76,7 +103,7 @@ const orderSchema = new mongoose.Schema(
           },
         },
 
-        //  Stores old policies if renewed
+        // Previous policies
         previousPolicies: [
           {
             name: String,
@@ -96,7 +123,9 @@ const orderSchema = new mongoose.Schema(
       },
     ],
 
-    //  Addresses
+    // =========================
+    // ADDRESSES
+    // =========================
     shippingAddress: {
       fullName: String,
       address: String,
@@ -117,18 +146,25 @@ const orderSchema = new mongoose.Schema(
       phone: String,
     },
 
+    // =========================
+    // PRICING
+    // =========================
     subtotal: Number,
     tax: Number,
     shipping: Number,
     total: Number,
     discount: { type: Number, default: 0 },
 
-    //  Payment
+    // =========================
+    // PAYMENT
+    // =========================
     paymentMethod: { type: String, default: "COD" },
     paymentStatus: { type: String, default: "Pending" },
     transactionId: String,
 
-    //  Order Status
+    // =========================
+    // ORDER STATUS
+    // =========================
     orderStatus: {
       type: String,
       enum: [
@@ -144,9 +180,13 @@ const orderSchema = new mongoose.Schema(
     },
 
     trackingNumber: String,
+
+    // Used for exchange 48h window
     deliveryDate: Date,
 
-    //  Tracking History
+    // =========================
+    // TRACKING HISTORY
+    // =========================
     trackingHistory: [
       {
         status: {
@@ -162,8 +202,8 @@ const orderSchema = new mongoose.Schema(
           ],
         },
         message: String,
-        updatedBy: { type: String },
-        actorName: { type: String },
+        updatedBy: String,
+        actorName: String,
         updatedAt: { type: Date, default: Date.now },
       },
     ],
