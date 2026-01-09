@@ -150,9 +150,10 @@ exports.createOrder = async (req, res) => {
           productId: item.productId,
           location,
           quantity: item.quantity,
-          vendorId: item.createdBy || item.vendorID || null
+          vendorId: item.vendorID || null   // FIXED
         });
       } catch (err) {
+        console.error("Inventory consume failed:", err.message);
         return res.status(400).json({
           success: false,
           message: "This item was just sold out. Please refresh and try again.",
@@ -162,7 +163,6 @@ exports.createOrder = async (req, res) => {
 
 
     const order = new Order(orderData);
-    console.log(orderData);
     await order.save();
     await InventoryHistory.create({
       action: "order_placed",
