@@ -37,13 +37,12 @@ const couponRoutes = require("./routes/coupon-code-router");
 const insurancePolicy = require("./routes/insurancePolicyRoutes");
 const insuranceClaim = require("./routes/insuranceClaimRoutes");
 const chatRoute = require("./routes/chat-routes");
-// const paypalRoutes = require("./routes/paypal-routes");
 const uploadRoutes = require("./routes/uploadRoutes");
 const discountRoutes = require("./routes/discount-routes");
 const brandRoutes = require("./routes/brand-routes");
 const supportChatRoutes = require("./routes/supportChatRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
-const squareWebhook = require("./routes/squareWebhook");
+const stripeWebhookRoutes = require("./routes/stripeWebhook");
 const community = require("./routes/frame-donation.routes")
 const inventoryRoutes = require("./routes/inventory.routes")
 const inventoryHistory = require("./routes/inventory-history-routes")
@@ -80,8 +79,7 @@ app.use(
   })
 );
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+
 
 // -------------------- STATIC FILES --------------------
 app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
@@ -94,6 +92,9 @@ app.get("/", (req, res) => {
     message: "Server is up and running....",
   });
 });
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }))
 
 // -------------------- API ROUTES --------------------
 app.use("/api", faq);
@@ -126,18 +127,18 @@ app.use("/api", couponRoutes);
 app.use("/api", insurancePolicy);
 app.use("/api", insuranceClaim);
 app.use("/api", chatRoute);
-// app.use("/api/paypal", paypalRoutes);
 app.use("/api", uploadRoutes);
 app.use("/api", discountRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", supportChatRoutes);
 app.use("/api", paymentRoutes);
-app.use("/api", squareWebhook);
+app.use("/api", stripeWebhookRoutes);
 app.use("/api", community);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api", inventoryHistory);
 
-
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;

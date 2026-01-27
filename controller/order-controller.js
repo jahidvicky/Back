@@ -4,11 +4,31 @@ const paymentTemplate = require("../utils/paymentTemplate");
 const generateTrackingNumber = require("../utils/generateTrackingNumber");
 const productModel = require("../model/product-model");
 const dayjs = require("dayjs");
-const { verifyPayPalPayment } = require("../utils/paypal");
+
 const InventoryService = require("../services/inventory.service");
-// const Inventory = require("../model/inventory-model");
 const InventoryHistory = require("../model/inventoryHistory-model");
 const sendEmail = require("../utils/sendEmail");
+
+
+const stripe = require("../config/stripe");
+
+async function verifyStripePayment(transactionId, expectedAmount) {
+  const intent = await stripe.paymentIntents.retrieve(transactionId);
+
+  if (intent.status !== "succeeded") {
+    throw new Error("Stripe payment not successful");
+  }
+
+  if (expectedAmount) {
+    const paid = intent.amount_received / 100;
+    if (Math.abs(paid - expectedAmount) > 0.05) {
+      throw new Error("Payment amount mismatch");
+    }
+  }
+
+  return intent;
+}
+
 
 exports.createOrder = async (req, res) => {
   try {
@@ -33,33 +53,14 @@ exports.createOrder = async (req, res) => {
       });
     }
 
-    // Verify payment if PayPal
-    if (paymentMethod === "PayPal") {
-      if (!transactionId)
-        return res
-          .status(400)
-          .json({ success: false, message: "Transaction ID not found" });
+    if (paymentMethod === "Stripe") {
+      const stripe = require("../config/stripe");
+      const intent = await stripe.paymentIntents.retrieve(transactionId);
 
-      const verified = await verifyPayPalPayment(transactionId);
-
-      if (verified.status !== "COMPLETED") {
+      if (intent.status !== "succeeded") {
         return res.status(400).json({
           success: false,
-          message: "Payment not verified with PayPal",
-          verifiedStatus: verified.status,
-        });
-      }
-
-      // Optional: ensure amount matches
-      const amount = verified.purchase_units?.[0]?.amount?.value;
-      const amountPaid = parseFloat(amount);
-      const totalExpected = parseFloat(total);
-      const difference = Math.abs(amountPaid - totalExpected);
-
-      if (difference > 0.05) {
-        return res.status(400).json({
-          success: false,
-          message: `Payment total mismatch. Expected ${totalExpected}, got ${amountPaid}`,
+          message: "Stripe payment not verified",
         });
       }
     }
@@ -137,6 +138,8 @@ exports.createOrder = async (req, res) => {
       ...req.body,
       userId: req.user?.id || req.body.userId,
       cartItems: cartItemsWithDetails,
+      orderStatus: "Placed",
+      paymentStatus: "Paid",
       total: total || 0,
       trackingNumber,
       trackingHistory: [
@@ -150,7 +153,7 @@ exports.createOrder = async (req, res) => {
           productId: item.productId,
           location,
           quantity: item.quantity,
-          vendorId: item.vendorID || null   // FIXED
+          vendorId: item.vendorID || null
         });
       } catch (err) {
         console.error("Inventory consume failed:", err.message);
@@ -506,15 +509,19 @@ exports.getOrderHistory = async (req, res) => {
 exports.renewPolicy = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { policyId } = req.body;
+    const { policyId, transactionId } = req.body;
+
+    if (!transactionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Stripe transactionId required",
+      });
+    }
 
     const order = await Order.findById(orderId);
     if (!order)
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Order not found" });
 
-    // Find the cart item by policyId
     const cartItemIndex = order.cartItems.findIndex(
       (item) =>
         item.policy &&
@@ -523,56 +530,60 @@ exports.renewPolicy = async (req, res) => {
     );
 
     if (cartItemIndex === -1)
-      return res
-        .status(404)
-        .json({ success: false, message: "Policy not found" });
+      return res.status(404).json({ success: false, message: "Policy not found" });
 
     const oldPolicy = order.cartItems[cartItemIndex].policy;
+
+    // 🔐 Stripe verification
+    await verifyStripePayment(transactionId, oldPolicy.price);
+
     const today = new Date();
     const durationDays = oldPolicy.durationDays || 1;
 
-    // Save old policy in previousPolicies
     order.cartItems[cartItemIndex].previousPolicies =
       order.cartItems[cartItemIndex].previousPolicies || [];
+
     order.cartItems[cartItemIndex].previousPolicies.push({
       ...oldPolicy,
       renewedAt: today,
     });
 
-    // Create new renewed policy
     order.cartItems[cartItemIndex].policy = {
       ...oldPolicy,
       purchasedAt: today,
-      expiryDate: new Date(
-        today.getTime() + durationDays * 24 * 60 * 60 * 1000
-      ),
+      expiryDate: new Date(today.getTime() + durationDays * 86400000),
       status: "Active",
       active: true,
       paymentStatus: "Paid",
+      transactionId,
     };
 
-    // Mark the array as modified (important for Mongoose)
     order.markModified("cartItems");
-
     await order.save();
 
     res.json({ success: true, message: "Policy renewed successfully", order });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 exports.payPolicy = async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { policyId } = req.body;
+    const { policyId, transactionId } = req.body;
+
+    if (!transactionId) {
+      return res.status(400).json({
+        success: false,
+        message: "Stripe transactionId required",
+      });
+    }
 
     const order = await Order.findById(orderId);
     if (!order)
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+      return res.status(404).json({ success: false, message: "Order not found" });
 
     const cartItem = order.cartItems.find(
       (item) => item.policy && item.policy._id?.toString() === policyId
@@ -583,10 +594,14 @@ exports.payPolicy = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Policy not found in order" });
 
-    // Mark policy as paid
-    cartItem.policy.paymentStatus = "Paid";
-    cartItem.policy.pricePaid = cartItem.policy.price; // optional: store the paid amount
+    //  Stripe verification
+    await verifyStripePayment(transactionId, cartItem.policy.price);
 
+    cartItem.policy.paymentStatus = "Paid";
+    cartItem.policy.pricePaid = cartItem.policy.price;
+    cartItem.policy.transactionId = transactionId;
+
+    order.markModified("cartItems");
     await order.save();
 
     res.json({
@@ -596,11 +611,10 @@ exports.payPolicy = async (req, res) => {
     });
   } catch (err) {
     console.error("Pay Policy Error:", err);
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to pay for policy" });
+    res.status(500).json({ success: false, message: err.message });
   }
 };
+
 
 
 // ===============================

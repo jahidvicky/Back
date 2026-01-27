@@ -502,11 +502,6 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    // numeric stock
-    // if (updateData.stockAvailability !== undefined) {
-    //   updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
-    // }
-
     /* -------- UPDATE PRODUCT -------- */
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
       new: true,
@@ -694,11 +689,6 @@ const updateVendorProduct = async (req, res) => {
     if (status === "Pending" && !existing.isSentForApproval) {
       updateData.productStatus = "Pending";
     }
-
-    // Force numeric stock
-    // if (updateData.stockAvailability !== undefined) {
-    //   updateData.stockAvailability = Number(updateData.stockAvailability) || 0;
-    // }
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, {
       new: true,

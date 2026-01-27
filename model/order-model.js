@@ -168,6 +168,7 @@ const orderSchema = new mongoose.Schema(
     orderStatus: {
       type: String,
       enum: [
+        "Payment Pending",
         "Placed",
         "Processing",
         "Shipped",
@@ -176,7 +177,7 @@ const orderSchema = new mongoose.Schema(
         "Returned",
         "Failed",
       ],
-      default: "Placed",
+      default: "Payment Pending",
     },
 
     trackingNumber: String,
