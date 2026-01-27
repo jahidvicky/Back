@@ -1,65 +1,37 @@
-// controller/paymentController.js
-const crypto = require("crypto");
-const { squareClient, SquareError } = require("../config/squareClient");
+const stripe = require("../config/stripe");
 
-exports.createSquarePayment = async (req, res) => {
+exports.createStripePaymentIntent = async (req, res) => {
     try {
-        const { nonce, amount } = req.body;
+        const { amount } = req.body;
 
-        // Create payment
-        const result = await squareClient.payments.create({
-            sourceId: nonce,
-            idempotencyKey: crypto.randomUUID(),
-            amountMoney: {
-                amount: BigInt(Math.round(Number(amount) * 100)),
-                currency: "CAD",
+        if (!amount || amount <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid amount",
+            });
+        }
+
+        const paymentIntent = await stripe.paymentIntents.create({
+            amount: Math.round(Number(amount) * 100), // CAD cents
+            currency: "cad",
+            automatic_payment_methods: {
+                enabled: true,
+            },
+            metadata: {
+                source: "atal-opticals",
             },
         });
 
-        const payment = result.payment;
-
-        // Make JSON-safe version
-        const safeAmount = payment.amountMoney?.amount
-            ? Number(payment.amountMoney.amount)
-            : null;
-
-        const responseData = {
-            id: payment.id,
-            status: payment.status,
-            amount: safeAmount,
-            currency: payment.amountMoney?.currency || "CAD",
-            createdAt: payment.createdAt,
-        };
-
-        // ❗ VALIDATE PAYMENT STATUS
-        if (payment.status !== "COMPLETED") {
-            return res.json({
-                success: false,
-                message: "Card declined or payment failed",
-                payment: responseData,
-            });
-        }
-
-        // SUCCESS
-        return res.json({
+        res.json({
             success: true,
-            payment: responseData,
+            clientSecret: paymentIntent.client_secret,
+            paymentIntentId: paymentIntent.id,
         });
-
     } catch (error) {
-        console.error("Square Error:", error);
-
-        if (error instanceof SquareError) {
-            return res.status(400).json({
-                success: false,
-                message: error.message,
-                errors: error.errors,
-            });
-        }
-
+        console.error("Stripe PaymentIntent Error:", error.message);
         res.status(500).json({
             success: false,
-            message: error.message || "Payment failed",
+            message: "Failed to create payment intent",
         });
     }
 };

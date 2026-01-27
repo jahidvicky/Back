@@ -1,9 +1,9 @@
-// Back/routes/paymentRoutes.js
 const express = require("express");
-const { createSquarePayment } = require("../controller/paymentController");
-
 const router = express.Router();
+const {
+    createStripePaymentIntent,
+} = require("../controller/paymentController");
 
-router.post("/pay", createSquarePayment);
+router.post("/payment/create-payment-intent", createStripePaymentIntent);
 
 module.exports = router;
