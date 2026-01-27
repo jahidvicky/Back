@@ -81,9 +81,9 @@ app.use(
 
 
 
-// -------------------- STATIC FILES --------------------
-app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
-app.use(express.static("public"));
+// // -------------------- STATIC FILES --------------------
+// app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
+// app.use(express.static("public"));
 
 // -------------------- BASIC ROUTE --------------------
 app.get("/", (req, res) => {
