@@ -43,9 +43,9 @@ const brandRoutes = require("./routes/brand-routes");
 const supportChatRoutes = require("./routes/supportChatRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const stripeWebhookRoutes = require("./routes/stripeWebhook");
-const community = require("./routes/frame-donation.routes")
-const inventoryRoutes = require("./routes/inventory.routes")
-const inventoryHistory = require("./routes/inventory-history-routes")
+const community = require("./routes/frame-donation.routes");
+const inventoryRoutes = require("./routes/inventory.routes");
+const inventoryHistory = require("./routes/inventory-history-routes");
 
 require("./corn/PolicyExpiryJob");
 
@@ -70,7 +70,7 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(null, false);
+        callback(new Error("Not allowed by CORS"));
       }
     },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
@@ -79,11 +79,20 @@ app.use(
   })
 );
 
+// -------------------- STATIC FILES --------------------
+app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
+app.use(express.static("public"));
 
+// -------------------- STRIPE WEBHOOK (MUST BE FIRST) --------------------
+app.use(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhookRoutes
+);
 
-// // -------------------- STATIC FILES --------------------
-// app.use("/uploads", express.static(path.join(__dirname, "/uploads")));
-// app.use(express.static("public"));
+// -------------------- BODY PARSERS --------------------
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // -------------------- BASIC ROUTE --------------------
 app.get("/", (req, res) => {
@@ -92,9 +101,6 @@ app.get("/", (req, res) => {
     message: "Server is up and running....",
   });
 });
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }))
 
 // -------------------- API ROUTES --------------------
 app.use("/api", faq);
@@ -132,13 +138,9 @@ app.use("/api", discountRoutes);
 app.use("/api", brandRoutes);
 app.use("/api", supportChatRoutes);
 app.use("/api", paymentRoutes);
-app.use("/api", stripeWebhookRoutes);
 app.use("/api", community);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api", inventoryHistory);
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;
@@ -147,8 +149,6 @@ mongoose
   .connect(process.env.MONGODB_URL)
   .then(() => {
     console.log("Connected to MongoDB Database");
-    console.log("DB Connected Successfully");
-
     server.listen(PORT, () => {
       console.log(`Server started on Port: ${PORT}`);
     });
