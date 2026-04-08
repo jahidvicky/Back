@@ -9,6 +9,8 @@ const InventoryService = require("../services/inventory.service");
 const InventoryHistory = require("../model/inventoryHistory-model");
 const sendEmail = require("../utils/sendEmail");
 
+const loomisService = require("../services/loomisService");
+
 
 const stripe = require("../config/stripe");
 
@@ -53,6 +55,18 @@ exports.createOrder = async (req, res) => {
       });
     }
 
+    const existingOrder = await Order.findOne({
+      transactionId: req.body.transactionId
+    });
+
+    if (existingOrder) {
+      return res.json({
+        success: true,
+        message: "Order already exists",
+        order: existingOrder
+      });
+    }
+
     if (paymentMethod === "Stripe") {
       const stripe = require("../config/stripe");
       const intent = await stripe.paymentIntents.retrieve(transactionId);
@@ -66,7 +80,7 @@ exports.createOrder = async (req, res) => {
     }
 
     const orderDate = new Date();
-    const trackingNumber = generateTrackingNumber();
+    const orderNumber = generateTrackingNumber();
 
     const cartItemsWithDetails = await Promise.all(
       cartItems.map(async (item) => {
@@ -90,9 +104,14 @@ exports.createOrder = async (req, res) => {
 
         //  Pick correct color variant image (new logic)
         let selectedColor =
-          (item.product_color && item.product_color[0]) ||
+          item.product_color?.[0]?.colorName ||
+          item.product_color?.[0] ||
           item.selectedColor ||
           null;
+
+        if (typeof selectedColor !== "string") {
+          selectedColor = null;
+        }
 
         let variantImage = null;
         let variantImages = [];
@@ -107,10 +126,20 @@ exports.createOrder = async (req, res) => {
           }
         }
 
+        let colors = [];
+
+        if (Array.isArray(item.product_color)) {
+          colors = item.product_color.flat().filter(c => typeof c === "string");
+        }
+
         return {
           productId: item.id || item.productId,
           name: item.name,
           price: item.price,
+          weight: product?.weight || 1,
+          length: product?.length || 10,
+          width: product?.width || 8,
+          height: product?.height || 6,
 
           //  Prefer color variant image if available
           image: variantImage || item.image,
@@ -123,7 +152,7 @@ exports.createOrder = async (req, res) => {
           categoryId: item.categoryId || null,
 
           product_size: item.product_size || [],
-          product_color: item.product_color || [],
+          product_color: colors || [],
           lens: item.lens || null,
           enhancement: item.enhancement || null,
           thickness: item.thickness || null,
@@ -141,7 +170,7 @@ exports.createOrder = async (req, res) => {
       orderStatus: "Placed",
       paymentStatus: "Paid",
       total: total || 0,
-      trackingNumber,
+      orderNumber,
       trackingHistory: [
         { status: "Placed", message: "Order placed successfully" },
       ],
@@ -167,6 +196,7 @@ exports.createOrder = async (req, res) => {
 
     const order = new Order(orderData);
     await order.save();
+
     await InventoryHistory.create({
       action: "order_placed",
       location: order.location,
@@ -197,6 +227,8 @@ exports.createOrder = async (req, res) => {
   }
 };
 
+
+
 const checkAndUpdateExpiredPolicies = (order) => {
   const now = new Date();
   let updated = false;
@@ -215,6 +247,8 @@ const checkAndUpdateExpiredPolicies = (order) => {
   });
   return updated;
 };
+
+
 
 exports.getOrderById = async (req, res) => {
   try {
@@ -246,7 +280,10 @@ exports.updateOrderStatus = async (req, res) => {
 
     //  Update fields
     if (status) order.orderStatus = status;
-    if (trackingNumber) order.trackingNumber = trackingNumber;
+    if (trackingNumber) {
+      order.shippingInfo = order.shippingInfo || {};
+      order.shippingInfo.trackingNumber = trackingNumber;
+    }
     if (deliveryDate) order.deliveryDate = deliveryDate;
 
     //  Log status change in tracking history
@@ -311,11 +348,8 @@ exports.cancleOrder = async (req, res) => {
         });
       }
 
-      // Cancel only the product
       product.status = "Cancelled";
 
-
-      // Check if all products are cancelled
       const allCancelled = order.cartItems.every(
         (item) => item.status === "Cancelled"
       );
@@ -328,11 +362,23 @@ exports.cancleOrder = async (req, res) => {
 
         order.trackingHistory.push({
           status: "Cancelled",
-          message: "Order cancelled (Product cancelled)",
+          message: "Order cancelled (all products cancelled)",
           updatedBy: "System",
           actorName: "System",
           updatedAt: new Date(),
         });
+
+        // ── Void Loomis shipment if exists ──
+        if (order.shippingInfo?.labelId && !order.shippingInfo?.voided) {
+          try {
+            await loomisService.voidShipment(order.shippingInfo.labelId);
+            order.shippingInfo.voided = true;
+            order.shippingInfo.voidedAt = new Date();
+          } catch (voidErr) {
+            // Don't block cancellation if void fails — log for manual recovery
+            console.error(`[CancelOrder] Failed to void shipment for order ${order._id}:`, voidErr.message);
+          }
+        }
       }
 
       await order.save();
@@ -361,6 +407,17 @@ exports.cancleOrder = async (req, res) => {
         actorName: "Customer",
         updatedAt: new Date(),
       });
+
+      // ── Void Loomis shipment if exists ──
+      if (order.shippingInfo?.labelId && !order.shippingInfo?.voided) {
+        try {
+          await loomisService.voidShipment(order.shippingInfo.labelId);
+          order.shippingInfo.voided = true;
+          order.shippingInfo.voidedAt = new Date();
+        } catch (voidErr) {
+          console.error(`[CancelOrder] Failed to void shipment for order ${order._id}:`, voidErr.message);
+        }
+      }
     }
 
     await order.save();
@@ -370,6 +427,7 @@ exports.cancleOrder = async (req, res) => {
       message: "Order cancelled successfully",
       order,
     });
+
   } catch (error) {
     console.error("Cancel order error:", error);
     res.status(500).json({
@@ -393,7 +451,7 @@ exports.getOrderTracking = async (req, res) => {
 
     res.json({
       success: true,
-      trackingNumber: order.trackingNumber,
+      trackingNumber: order.shippingInfo?.trackingNumber,
       status: order.orderStatus,
       deliveryDate: order.deliveryDate,
       trackingHistory: order.trackingHistory,
@@ -404,35 +462,79 @@ exports.getOrderTracking = async (req, res) => {
   }
 };
 
+
 exports.trackOrderByTrackingNumber = async (req, res) => {
   try {
     const { trackingNumber } = req.params;
 
-    //  Find order by tracking number (case-insensitive)
-    const order = await Order.findOne({
-      trackingNumber: trackingNumber.toUpperCase(),
+    let order = await Order.findOne({
+      "shippingInfo.trackingNumber": trackingNumber.toUpperCase(),
     });
 
     if (!order) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+      order = await Order.findOne({
+        orderNumber: trackingNumber.toUpperCase(),
+      });
     }
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "No order found with this tracking or order number",
+      });
+    }
+
+    let loomisTracking = null;
+
+    if (order.shippingInfo?.trackingNumber) {
+      try {
+        loomisTracking = await loomisService.trackShipment(
+          order.shippingInfo.trackingNumber
+        );
+      } catch (err) {
+        console.error("Loomis tracking failed:", err.message);
+      }
+    }
+
+    // Filter out admin-only statuses from customer view
+    const ADMIN_ONLY_STATUSES = ["Pickup Scheduled", "Shipment Voided"];
+
+    const customerTrackingHistory = order.trackingHistory.filter((entry) => {
+      // Remove admin-only statuses
+      if (ADMIN_ONLY_STATUSES.includes(entry.status)) return false;
+
+      // Remove old bad entries where void was incorrectly saved as Cancelled
+      if (
+        entry.status === "Cancelled" &&
+        typeof entry.message === "string" &&
+        entry.message.toLowerCase().includes("voided")
+      ) return false;
+
+      return true;
+    });
 
     res.json({
       success: true,
-      trackingNumber: order.trackingNumber,
-      status: order.orderStatus,
-      deliveryDate: order.deliveryDate,
-      trackingHistory: order.trackingHistory,
-      shippingAddress: order.shippingAddress,
-      total: order.total,
+      orderStatus: order.orderStatus,
+      orderNumber: order.orderNumber,
+      trackingNumber: order.shippingInfo?.trackingNumber || null,
+      shippingInfo: order.shippingInfo || null,
+      deliveryDate: order.deliveryDate || null,
+      courierTracking: loomisTracking,
+      trackingHistory: customerTrackingHistory,
     });
+
   } catch (err) {
     console.error("Track Order Error:", err);
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({
+      success: false,
+      message: err.message,
+    });
   }
 };
+
+
+
 
 exports.getAllOrders = async (req, res) => {
   try {
@@ -465,6 +567,17 @@ exports.getAllOrders = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to fetch admin orders" });
+  }
+};
+
+
+exports.getAllOrdersForReport = async (req, res) => {
+  try {
+    const orders = await Order.find().sort({ createdAt: -1 });
+    res.json({ success: true, orders });
+  } catch (err) {
+    console.error("Get All Orders Error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch orders" });
   }
 };
 
@@ -859,7 +972,7 @@ exports.completeExchange = async (req, res) => {
     item.exchangeCompletedAt = new Date();
 
     order.trackingHistory.push({
-      status: order.orderStatus, // ✅ enum safe
+      status: order.orderStatus, //  enum safe
       message: `Exchange completed for ${item.name}`,
       updatedBy: "Admin",
       actorName: req.user?.name || "Admin",
@@ -892,3 +1005,223 @@ exports.completeExchange = async (req, res) => {
   }
 };
 
+
+
+
+
+// ===============================
+// RETURN REQUEST — Customer raises return
+// ===============================
+
+exports.requestReturn = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { reason } = req.body;
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ success: false, message: "Return reason is required" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+
+    if (order.orderStatus !== "Delivered") {
+      return res.status(400).json({ success: false, message: "Return can only be requested for delivered orders" });
+    }
+
+    if (order.returnRequest?.status) {
+      return res.status(400).json({ success: false, message: "Return already requested for this order" });
+    }
+
+    const images = req.files?.length ? req.files.map((f) => f.filename) : [];
+
+    order.returnRequest = {
+      status: "Requested",
+      reason: reason.trim(),
+      images,
+      requestedAt: new Date(),
+      resolvedAt: null,
+      rejectionReason: null,
+    };
+
+    order.trackingHistory.push({
+      status: "Returned",
+      message: "Customer requested a return",
+      updatedBy: "Customer",
+      actorName: "Customer",
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    res.status(200).json({ success: true, message: "Return request submitted", order });
+  } catch (err) {
+    console.error("Request return error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ===============================
+// RETURN REQUESTS — Admin get all pending
+// ===============================
+
+exports.getReturnRequests = async (req, res) => {
+  try {
+    const orders = await Order.find({
+      "returnRequest.status": { $in: ["Requested", "Approved", "Rejected"] },
+    })
+      .select("_id email orderNumber orderStatus cartItems shippingAddress returnRequest returnInfo createdAt")
+      .sort({ "returnRequest.requestedAt": -1 });
+
+    res.status(200).json({ success: true, orders });
+  } catch (err) {
+    console.error("Get return requests error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch return requests" });
+  }
+};
+
+// ===============================
+// APPROVE RETURN — Admin approves, triggers E-Return API
+// ===============================
+
+exports.approveReturn = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findById(orderId);
+
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order.returnRequest) return res.status(400).json({ success: false, message: "No return request found" });
+    if (order.returnRequest.status !== "Requested") {
+      return res.status(400).json({ success: false, message: `Return already ${order.returnRequest.status}` });
+    }
+
+    if (order.returnInfo?.trackingNumber) {
+      return res.status(400).json({ success: false, message: "E-Return already created for this order" });
+    }
+
+    const totalWeight = order.cartItems.reduce(
+      (w, item) => w + (item.weight || 1) * (item.quantity || 1), 0
+    );
+
+    const rmaNumber = `RMA-${order._id}`;
+
+    const returnShipment = await loomisService.createReturnShipment({
+      customerName: order.shippingAddress.fullName,
+      customerAddress: order.shippingAddress.address,
+      customerCity: order.shippingAddress.city,
+      customerProvince: order.shippingAddress.province,
+      customerPostalCode: order.shippingAddress.postalCode,
+      customerPhone: order.shippingAddress.phone,
+      customerEmail: order.email || "",
+      weight: totalWeight,
+      rmaNumber,
+    });
+
+    order.returnRequest.status = "Approved";
+    order.returnRequest.resolvedAt = new Date();
+
+    order.returnInfo = {
+      trackingNumber: returnShipment.trackingNumber,
+      eReturnId: returnShipment.eReturnId,
+      rmaNumber,
+      shippingDate: returnShipment.shippingDate,
+      createdAt: new Date(),
+      rawResponse: returnShipment,
+    };
+
+    order.orderStatus = "Returned";
+
+    order.trackingHistory.push({
+      status: "Returned",
+      message: `Return approved by admin. E-Return created. Customer tracking: ${returnShipment.trackingNumber}. Loomis will arrange pickup.`,
+      updatedBy: "Admin",
+      actorName: "Admin",
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    try {
+      await sendEmail({
+        to: order.email,
+        subject: "Return Request Approved",
+        html: `
+          <h2>Return Request Approved</h2>
+          <p>Your return request for order <b>#${order.orderNumber}</b> has been approved.</p>
+          <p><b>Return Tracking Number:</b> ${returnShipment.trackingNumber}</p>
+          <p>Loomis Express will arrange pickup from your address. The label will be printed at the nearest Loomis facility.</p>
+          <p><b>RMA Number:</b> ${rmaNumber}</p>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Return approval email failed:", mailErr.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Return approved and E-Return created",
+      trackingNumber: returnShipment.trackingNumber,
+      rmaNumber,
+      order,
+    });
+  } catch (err) {
+    console.error("Approve return error:", err);
+    res.status(500).json({ success: false, message: "Failed to approve return", error: err.message });
+  }
+};
+
+// ===============================
+// REJECT RETURN — Admin rejects with reason
+// ===============================
+
+exports.rejectReturn = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { rejectionReason } = req.body;
+
+    if (!rejectionReason || !rejectionReason.trim()) {
+      return res.status(400).json({ success: false, message: "Rejection reason is required" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) return res.status(404).json({ success: false, message: "Order not found" });
+    if (!order.returnRequest) return res.status(400).json({ success: false, message: "No return request found" });
+    if (order.returnRequest.status !== "Requested") {
+      return res.status(400).json({ success: false, message: `Return already ${order.returnRequest.status}` });
+    }
+
+    order.returnRequest.status = "Rejected";
+    order.returnRequest.rejectionReason = rejectionReason.trim();
+    order.returnRequest.resolvedAt = new Date();
+
+    order.trackingHistory.push({
+      status: "Delivered",
+      message: `Return request rejected. Reason: ${rejectionReason.trim()}`,
+      updatedBy: "Admin",
+      actorName: "Admin",
+      updatedAt: new Date(),
+    });
+
+    await order.save();
+
+    try {
+      await sendEmail({
+        to: order.email,
+        subject: "Return Request Rejected",
+        html: `
+          <h2>Return Request Rejected</h2>
+          <p>Your return request for order <b>#${order.orderNumber}</b> has been rejected.</p>
+          <p><b>Reason:</b> ${rejectionReason.trim()}</p>
+          <p>If you have questions, please contact support.</p>
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Return rejection email failed:", mailErr.message);
+    }
+
+    res.status(200).json({ success: true, message: "Return rejected", order });
+  } catch (err) {
+    console.error("Reject return error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};

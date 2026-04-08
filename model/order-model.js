@@ -1,5 +1,92 @@
 const mongoose = require("mongoose");
 
+
+const shippingInfoSchema = new mongoose.Schema({
+  courier: {
+    type: String,
+    default: "Loomis",
+  },
+
+  trackingNumber: String,
+
+  shipmentId: String,
+
+  shipmentNumber: String,
+
+  labelId: String,
+
+  shippingLabel: String,
+
+  manifestNum: { type: String, default: null },
+
+  serviceCode: { type: String, default: null },       // ← WAS MISSING
+  serviceType: { type: String, default: "DD" },
+  serviceName: { type: String, default: null },       // ← WAS MISSING
+  rateCharged: { type: Number, default: null },
+
+  originPostalCode: String,
+  originProvince: String,
+
+  destinationPostalCode: String,
+  destinationProvince: String,
+
+  weight: Number,
+  length: Number,
+  width: Number,
+  height: Number,
+
+  rate: Number,
+
+  expectedDeliveryDate: {
+    type: Date,
+    default: null,
+  },
+  initialExpectedDeliveryDate: { type: Date, default: null },  // ← WAS MISSING
+  finalExpectedDeliveryDate: { type: Date, default: null },
+
+  voided: { type: Boolean, default: false },          // ← WAS MISSING (was never saving!)
+  voidedAt: { type: Date, default: null },
+
+  cachedLabelBase64: { type: String, default: null },
+
+  rawResponse: Object
+
+}, { _id: false });
+
+
+const pickupInfoSchema = new mongoose.Schema({
+  confirmationNumber: { type: String, default: null },
+  pickupDate: { type: String, default: null },  // "YYYYMMDD"
+  readyTime: { type: String, default: null },  // "09:00"
+  closeTime: { type: String, default: null },  // "17:00"
+  scheduledAt: { type: Date, default: null },
+  rawResponse: { type: Object, default: null },
+}, { _id: false });
+
+
+const returnInfoSchema = new mongoose.Schema({
+  trackingNumber: { type: String, default: null },
+  eReturnId: { type: String, default: null },
+  rmaNumber: { type: String, default: null },
+  shippingDate: { type: String, default: null },
+  createdAt: { type: Date, default: null },
+  rawResponse: { type: Object, default: null },
+}, { _id: false });
+
+const returnRequestSchema = new mongoose.Schema({
+  status: {
+    type: String,
+    enum: ["Requested", "Approved", "Rejected"],
+    default: "Requested",
+  },
+  reason: { type: String, required: true },
+  images: [{ type: String }],
+  requestedAt: { type: Date, default: Date.now },
+  resolvedAt: { type: Date, default: null },
+  rejectionReason: { type: String, default: null },
+}, { _id: false });
+
+
 const orderSchema = new mongoose.Schema(
   {
     userId: {
@@ -31,8 +118,8 @@ const orderSchema = new mongoose.Schema(
         price: Number,
         subCategoryName: String,
         quantity: { type: Number, default: 1 },
-
         createdBy: { type: String },
+
 
         vendorID: {
           type: mongoose.Schema.Types.ObjectId,
@@ -55,8 +142,13 @@ const orderSchema = new mongoose.Schema(
           default: "Active",
         },
 
+        weight: { type: Number, default: 1 },
+        length: { type: Number, default: 10 },
+        width: { type: Number, default: 8 },
+        height: { type: Number, default: 6 },
+
         // =========================
-        // 🔁 EXCHANGE LOGIC (NEW)
+        //  EXCHANGE LOGIC (NEW)
         // =========================
         isPrescription: {
           type: Boolean,
@@ -158,7 +250,6 @@ const orderSchema = new mongoose.Schema(
     // =========================
     // PAYMENT
     // =========================
-    paymentMethod: { type: String, default: "COD" },
     paymentStatus: { type: String, default: "Pending" },
     transactionId: String,
 
@@ -179,11 +270,9 @@ const orderSchema = new mongoose.Schema(
       ],
       default: "Payment Pending",
     },
-
-    trackingNumber: String,
-
     // Used for exchange 48h window
     deliveryDate: Date,
+    shippedAt: Date,
 
     // =========================
     // TRACKING HISTORY
@@ -200,6 +289,8 @@ const orderSchema = new mongoose.Schema(
             "Cancelled",
             "Returned",
             "Failed",
+            "Pickup Scheduled",
+            "Shipment Voided",
           ],
         },
         message: String,
@@ -208,6 +299,22 @@ const orderSchema = new mongoose.Schema(
         updatedAt: { type: Date, default: Date.now },
       },
     ],
+
+    // =========================
+    // SHIPPING / COURIER DATA
+    // =========================
+
+    shippingInfo: shippingInfoSchema,
+    pickupInfo: pickupInfoSchema,
+    returnInfo: returnInfoSchema,
+    returnRequest: returnRequestSchema,
+
+    orderNumber: {
+      type: String,
+      unique: true,
+    },
+
+
   },
   { timestamps: true }
 );

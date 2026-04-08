@@ -14,9 +14,11 @@ const chatSessionSchema = new mongoose.Schema(
         status: { type: String, enum: ["pending", "active", "closed"], default: "pending" },
         rating: { type: Number, min: 1, max: 5, default: null },
         assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: "AdminUser", default: null },
+        isAssigned: { type: Boolean, default: false }, // ← add this
         messages: [messageSchema],
     },
     { timestamps: true }
 );
+
 
 module.exports = mongoose.model("ChatSession", chatSessionSchema);

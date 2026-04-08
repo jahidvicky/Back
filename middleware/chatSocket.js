@@ -55,7 +55,7 @@ function initChatSocket(server) {
 
                 // AI AUTO REPLY IF NO ADMIN
                 const chat = await ChatSession.findById(chatId);
-                if (!chat.assignedTo && chat.status !== "closed") {
+                if (!chat.isAssigned && chat.status !== "closed") {
                     const prompt = `Assistant for ATAL Optical:
                     Reason: ${chat.reason}
                     User: ${text}`;

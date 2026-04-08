@@ -81,6 +81,11 @@ const ProductSchema = new mongoose.Schema(
     lens_hieght: String,
     temple_length: String,
 
+    weight: { type: Number, default: 1 },
+    length: { type: Number, default: 10 },
+    width: { type: Number, default: 8 },
+    height: { type: Number, default: 6 },
+
     // Lens details
     product_lens_title1: String,
     product_lens_description1: String,

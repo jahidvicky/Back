@@ -5,6 +5,9 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const http = require("http");
 const { initChatSocket } = require("./middleware/chatSocket");
+const { initTrackingJob } = require("./corn/loomistrackingjob");
+const { initEndOfDayJob } = require("./corn/loomisEndOfDayJob");
+
 
 // ***************** Routes ****************
 const faq = require("./routes/faq-Routes");
@@ -46,6 +49,7 @@ const stripeWebhookRoutes = require("./routes/stripeWebhook");
 const community = require("./routes/frame-donation.routes");
 const inventoryRoutes = require("./routes/inventory.routes");
 const inventoryHistory = require("./routes/inventory-history-routes");
+const loomisRoutes = require("./routes/loomisRoutes");
 
 require("./corn/PolicyExpiryJob");
 
@@ -141,6 +145,7 @@ app.use("/api", paymentRoutes);
 app.use("/api", community);
 app.use("/api/inventory", inventoryRoutes);
 app.use("/api", inventoryHistory);
+app.use("/api/shipping", loomisRoutes);
 
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;
@@ -149,6 +154,10 @@ mongoose
   .connect(process.env.MONGODB_URL)
   .then(() => {
     console.log("Connected to MongoDB Database");
+
+    initTrackingJob();
+    initEndOfDayJob();
+
     server.listen(PORT, () => {
       console.log(`Server started on Port: ${PORT}`);
     });

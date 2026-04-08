@@ -203,7 +203,7 @@ const getAllProducts = async (req, res) => {
   try {
     const { search, category, subCategory } = req.query;
     let query = {
-      productStatus: "Approved",        // <<< IMPORTANT
+      productStatus: "Approved",
     };
 
     // Search filter
@@ -291,6 +291,22 @@ const getVendorApprovalProducts = async (req, res) => {
       success: false,
       message: "Failed to fetch products",
     });
+  }
+};
+
+
+const getAllProductsAdmin = async (req, res) => {
+  try {
+    const { status } = req.query; // "Approved" | "Rejected" | "Pending" | undefined (all)
+
+    const query = {};
+    if (status) query.productStatus = status;
+
+    const products = await Product.find(query).sort({ createdAt: -1 });
+
+    return res.status(200).json({ success: true, count: products.length, products });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -543,7 +559,7 @@ const updateVendorProduct = async (req, res) => {
         .json({ success: false, message: "Product not found" });
     }
 
-    // Only owner vendor can update (if you want this)
+    // Vendor authorization
     if (
       req.user.role === "vendor" &&
       existing.vendorID?.toString() !== req.user.id.toString()
@@ -564,7 +580,7 @@ const updateVendorProduct = async (req, res) => {
       return res.status(403).json({
         success: false,
         message:
-          "Cannot edit product while it is sent for approval. Wait for admin to approve or reject.",
+          "Cannot edit product while it is sent for approval. Wait for admin.",
       });
     }
 
@@ -573,7 +589,9 @@ const updateVendorProduct = async (req, res) => {
     ------------------------------------------------ */
     if (updateData.contactLens_packs) {
       try {
-        updateData.contactLens_packs = JSON.parse(updateData.contactLens_packs);
+        updateData.contactLens_packs = JSON.parse(
+          updateData.contactLens_packs
+        );
       } catch (e) {
         updateData.contactLens_packs = [];
       }
@@ -608,7 +626,7 @@ const updateVendorProduct = async (req, res) => {
       });
     }
 
-    // Merge new images into variants
+    // Merge images into variants
     Object.entries(grouped).forEach(([color, images]) => {
       const existingVariant = variants.find((v) => v.colorName === color);
 
@@ -619,7 +637,9 @@ const updateVendorProduct = async (req, res) => {
       }
     });
 
-    updateData.product_variants = variants;
+    if (variants.length > 0) {
+      updateData.product_variants = variants;
+    }
 
     /* ------------------------------------------------
       LENS IMAGES
@@ -636,23 +656,44 @@ const updateVendorProduct = async (req, res) => {
     }
 
     /* ------------------------------------------------
-      Restrict Fields When Approved
+      Restrict Fields When Approved (SMART LOGIC)
     ------------------------------------------------ */
     if (status === "Approved") {
-      // Vendor can only change price, sale price, stock, images & packs
       const allowedApprovedFields = [
         "product_price",
         "product_sale_price",
         "product_variants",
+        "stockAvailability",
         "product_lens_image1",
         "product_lens_image2",
         "contactLens_packs",
         "colorData",
         "isBestSeller",
         "isTrending",
-        "removedImages"
+        "removedImages",
       ];
 
+      const restrictedFields = [
+        "product_lens_title1",
+        "product_lens_description1",
+        "product_lens_title2",
+        "product_lens_description2",
+      ];
+
+      //  Remove restricted fields if unchanged
+      restrictedFields.forEach((field) => {
+        if (
+          updateData[field] !== undefined &&
+          updateData[field] === existing[field]
+        ) {
+          delete updateData[field];
+        }
+      });
+
+      //  Remove ALL restricted fields (extra safety)
+      restrictedFields.forEach((field) => {
+        delete updateData[field];
+      });
 
       const disallowedFields = Object.keys(updateData).filter(
         (key) => !allowedApprovedFields.includes(key)
@@ -667,24 +708,21 @@ const updateVendorProduct = async (req, res) => {
         });
       }
 
-      // IMPORTANT: Do NOT change product status if already approved
+      // Prevent status changes
       delete updateData.productStatus;
       delete updateData.isResubmitted;
       delete updateData.isSentForApproval;
-      // rejectionReason remains untouched
     }
 
-
     /* ------------------------------------------------
-      Rejected → Vendor can edit everything (but stays Rejected until re-sent)
+      Rejected → editable
     ------------------------------------------------ */
     if (status === "Rejected") {
       updateData.productStatus = "Rejected";
-      // keep rejectionReason until they re-send via sendProductForApproval
     }
 
     /* ------------------------------------------------
-      Pending → Vendor can edit everything, but not if already sent (handled above)
+      Pending → editable
     ------------------------------------------------ */
     if (status === "Pending" && !existing.isSentForApproval) {
       updateData.productStatus = "Pending";
@@ -1007,4 +1045,5 @@ module.exports = {
   getBestSellerProducts,
   getTrendingProducts,
   getProductByCatId,
+  getAllProductsAdmin
 };

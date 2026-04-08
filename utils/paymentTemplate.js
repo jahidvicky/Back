@@ -8,12 +8,12 @@ function paymentTemplate(order) {
       <h3 style="margin-top:20px;">Order Summary</h3>
       <table style="width:100%; border-collapse: collapse; margin-top:10px;">
         <tr>
-          <td style="padding:8px; border:1px solid #ddd;"><b>Order ID</b></td>
-          <td style="padding:8px; border:1px solid #ddd;">${order._id}</td>
+          <td style="padding:8px; border:1px solid #ddd;"><b>Order Number</b></td>
+          <td style="padding:8px; border:1px solid #ddd;">${order.orderNumber}</td>
         </tr>
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Tracking Number</b></td>
-          <td style="padding:8px; border:1px solid #ddd;">${order.trackingNumber}</td>
+          <td style="padding:8px; border:1px solid #ddd;">${order.shippingInfo?.trackingNumber}</td>
         </tr>
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Order Date</b></td>
@@ -28,10 +28,6 @@ function paymentTemplate(order) {
       <!-- PAYMENT DETAILS -->
       <h3 style="margin-top:20px;">Payment Details</h3>
       <table style="width:100%; border-collapse: collapse; margin-top:10px;">
-        <tr>
-          <td style="padding:8px; border:1px solid #ddd;"><b>Payment Method</b></td>
-          <td style="padding:8px; border:1px solid #ddd;">${order.paymentMethod}</td>
-        </tr>
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Payment Status</b></td>
           <td style="padding:8px; border:1px solid #ddd;">${order.paymentStatus}</td>
@@ -97,18 +93,18 @@ function paymentTemplate(order) {
       <table style="width:100%; border-collapse: collapse; margin-top:10px;">
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Name</b></td>
-          <td style="padding:8px; border:1px solid #ddd;">${order.shippingAddress.fullName}</td>
+          <td style="padding:8px; border:1px solid #ddd;">${order.shippingAddress?.fullName}</td>
         </tr>
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Phone</b></td>
-          <td style="padding:8px; border:1px solid #ddd;">${order.shippingAddress.phone}</td>
+          <td style="padding:8px; border:1px solid #ddd;">${order.shippingAddress?.phone}</td>
         </tr>
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Address</b></td>
           <td style="padding:8px; border:1px solid #ddd;">
-            ${order.shippingAddress.address}, ${order.shippingAddress.city},
-            ${order.shippingAddress.province}, ${order.shippingAddress.postalCode},
-            ${order.shippingAddress.country}
+            ${order.shippingAddress?.address}, ${order.shippingAddress?.city},
+            ${order.shippingAddress?.province}, ${order.shippingAddress?.postalCode},
+            ${order.shippingAddress?.country}
           </td>
         </tr>
       </table>

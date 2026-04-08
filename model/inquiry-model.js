@@ -14,7 +14,7 @@ const InquirySchema = new mongoose.Schema(
         },
         inquiryStatus: {
             type: String,
-            enum: ["open", "close"],
+            enum: ["open", "close", "rejected"],
             default: "open",
             required: true,
         },
