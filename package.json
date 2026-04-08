@@ -34,6 +34,7 @@
     "pdfkit": "^0.17.2",
     "puppeteer": "^24.39.1",
     "soap": "^1.8.0",
+    "puppeteer-core": "^24.36.1",
     "socket.io": "^4.8.1",
     "stripe": "^20.2.0",
     "uuid": "^13.0.0"
