@@ -19,14 +19,14 @@ router.get("/get-inventory", controller.getInventoryList);
 ========================= */
 //  PLP (global stock)
 router.get(
-  "/available-products",
-  controller.getAvailableProducts
+   "/available-products",
+   controller.getAvailableProducts
 );
 
 //  Checkout (location stock)
 router.get(
-  "/available-products/:location",
-  controller.getAvailableProducts
+   "/available-products/:location",
+   controller.getAvailableProducts
 );
 
 /* =========================

@@ -113,3 +113,39 @@ exports.submitRating = async (req, res) => {
         return res.status(500).json({ error: "Failed to submit rating" });
     }
 };
+
+
+exports.assignChat = async (req, res) => {
+    try {
+        const { chatId } = req.params;
+
+        const chat = await ChatSession.findById(chatId);
+        if (!chat) return res.status(404).json({ error: "Chat not found" });
+
+        // Use adminId from body if sent, otherwise just mark as assigned with a flag
+        const { adminId } = req.body;
+
+        const updateData = adminId
+            ? { assignedTo: adminId }
+            : { $set: { assignedTo: null } }; // fallback
+
+        // We'll use a separate boolean field instead to avoid ObjectId issues
+        const updatedChat = await ChatSession.findByIdAndUpdate(
+            chatId,
+            { isAssigned: true, assignedTo: adminId || undefined },
+            { new: true }
+        );
+
+        try {
+            const { getIO } = require("../middleware/chatSocket");
+            getIO().emit("chatAssigned", updatedChat);
+        } catch (e) {
+            console.error("Socket emit chatAssigned error:", e.message);
+        }
+
+        return res.json({ message: "Chat assigned", chat: updatedChat });
+    } catch (err) {
+        console.error("assignChat error:", err.message);
+        return res.status(500).json({ error: "Failed to assign chat" });
+    }
+};

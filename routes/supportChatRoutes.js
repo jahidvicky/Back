@@ -6,5 +6,6 @@ router.get("/support/:chatId", ctrl.getChatMessages);
 router.get("/support", ctrl.getAllChats);
 router.patch("/support/:chatId/close", ctrl.closeChat);
 router.patch("/support/:chatId/rating", ctrl.submitRating);
+router.patch("/support/:chatId/assign", ctrl.assignChat);
 
 module.exports = router;

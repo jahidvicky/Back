@@ -6,11 +6,9 @@ const CustomerSchema = new mongoose.Schema(
         lastName: { type: String, required: true, trim: true },
         dateOfBirth: { type: Date, required: true },
         mobilePhone: { type: String, required: true, unique: true },
-        smsOptIn: { type: Boolean, default: false },
         profileImage: { type: String },
         email: { type: String, required: true, unique: true, lowercase: true },
         password: { type: String, required: true },
-        twoFactorAuth: { type: String, enum: ["Email", "SMS"], default: "Email" },
 
         address: {
             street: { type: String, required: true },
@@ -20,12 +18,8 @@ const CustomerSchema = new mongoose.Schema(
             country: { type: String, required: false },
         },
 
-        communicationPreference: {
-            email: { type: Boolean, default: false },
-            sms: { type: Boolean, default: false },
-            phone: { type: Boolean, default: false },
-        },
-        marketingOptIn: { type: Boolean, default: false },
+        otpCode: { type: String, default: null },
+        otpExpiresAt: { type: Date, default: null },
 
         prescriptionFile: { type: String, required: false },
     },

@@ -78,6 +78,12 @@ router.get(
 
 //  PRODUCTS SENT FOR APPROVAL (Admin Dashboard)
 router.get("/getVendorApprovalProduct", productController.getVendorApprovalProducts);
+router.get(
+  "/admin/all-products",
+  protect,
+  allowRoles("admin"),
+  productController.getAllProductsAdmin
+);
 router.get("/getBestSellerProduct", productController.getBestSellerProducts);
 router.get("/getTrendingProduct", productController.getTrendingProducts);
 

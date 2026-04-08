@@ -1,10 +1,18 @@
 const express = require("express");
 const router = express.Router();
 const orderController = require("../controller/order-controller");
-const { protect, allowRoles } = require("../middleware/auth-middleware");
+const { protect, allowRoles, authMiddleware } = require("../middleware/auth-middleware");
 const uploadExchangeImages = require("../middleware/exchangeUpload")
+const multer = require("multer"); // assuming multer is already configured
+const upload = multer({ dest: "uploads/" });
 
 router.post("/order", orderController.createOrder);
+
+
+router.post("/order/return/:orderId", upload.array("returnImages", 5), orderController.requestReturn);
+router.get("/order/return-requests", orderController.getReturnRequests);        // admin
+router.post("/order/return/approve/:orderId", orderController.approveReturn);   // admin
+router.post("/order/return/reject/:orderId", orderController.rejectReturn);     // admin
 
 router.get("/order/:id", orderController.getOrderById);
 
@@ -26,6 +34,8 @@ router.get(
 );
 
 router.get("/allOrder", orderController.getAllOrders);
+
+router.get("/all-orders-report", orderController.getAllOrdersForReport);
 
 router.get(
   "/vendor-orders",
