@@ -24,10 +24,13 @@ router.get(
 );
 
 //  Checkout (location stock)
-router.get(
-   "/available-products/:location",
-   controller.getAvailableProducts
-);
+// router.get(
+//    "/available-products/:location",
+//    controller.getAvailableProducts
+// );
+
+//  Global products (no location now)
+router.get("/available-products", controller.getAvailableProducts);
 
 /* =========================
    RESYNC

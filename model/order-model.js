@@ -97,15 +97,11 @@ const orderSchema = new mongoose.Schema(
 
     email: { type: String, required: true },
 
-    location: {
-      type: String,
-      enum: ["east", "west"],
-      required: true,
-    },
-
-    // =========================
-    // CART ITEMS
-    // =========================
+    // location: {
+    //   type: String,
+    //   enum: ["east", "west"],
+    //   required: true,
+    // },
     cartItems: [
       {
         productId: String,

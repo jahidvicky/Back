@@ -34,7 +34,7 @@ async function verifyStripePayment(transactionId, expectedAmount) {
 
 exports.createOrder = async (req, res) => {
   try {
-    const { email, cartItems, total, paymentMethod, transactionId, location } =
+    const { email, cartItems, total, paymentMethod, transactionId, } =
       req.body;
 
     if (!cartItems || cartItems.length === 0) {
@@ -48,12 +48,12 @@ exports.createOrder = async (req, res) => {
         .json({ success: false, message: "Email required" });
     }
 
-    if (!location || !["east", "west"].includes(location)) {
-      return res.status(400).json({
-        success: false,
-        message: "Location is required (east or west)",
-      });
-    }
+    // if (!location || !["east", "west"].includes(location)) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: "Location is required (east or west)",
+    //   });
+    // }
 
     const existingOrder = await Order.findOne({
       transactionId: req.body.transactionId
@@ -180,7 +180,7 @@ exports.createOrder = async (req, res) => {
       try {
         await InventoryService.consumeForOrder({
           productId: item.productId,
-          location,
+          // location,
           quantity: item.quantity,
           vendorId: item.vendorID || null
         });
@@ -199,7 +199,7 @@ exports.createOrder = async (req, res) => {
 
     await InventoryHistory.create({
       action: "order_placed",
-      location: order.location,
+      // location: order.location,
       orderId: order._id,
       quantity: order.cartItems.reduce((t, i) => t + i.quantity, 0),
       performedBy: order.email,
