@@ -5,7 +5,7 @@ const thankYouDonation = require("../utils/thankYouDonation");
 
 exports.createDonation = async (req, res) => {
   try {
-    const { name, email, phone, address, postal, frameType } = req.body;
+    const { name, email, phone, address, postal, frameType, frameImages } = req.body;
 
     //  Required fields check
     if (!name || !email || !phone || !address || !postal || !frameType) {
@@ -59,6 +59,8 @@ exports.createDonation = async (req, res) => {
       email,
       phone,
       address,
+      frameType,
+      frameImages: imageFiles,
     });
 
     //  Send thank-you email to donor

@@ -61,10 +61,10 @@ const ProductSchema = new mongoose.Schema(
 
     availableStock: { type: Number, default: 0, min: 0 },
     inStock: { type: Boolean, default: false },
-    productLocation: {
-      type: [String],
-      default: []
-    },
+    // productLocation: {
+    //   type: [String],
+    //   default: []
+    // },
 
 
 

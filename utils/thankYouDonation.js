@@ -21,7 +21,7 @@ const thankYouDonation = (name) => {
                   Thank You for Your Donation
                 </h1>
                 <p style="color:#ffe5e5; margin:6px 0 0;">
-                  Atal Optical – Our Community Initiative
+                  Atal Optical – Frame Donation Initiative
                 </p>
               </td>
             </tr>

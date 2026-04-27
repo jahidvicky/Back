@@ -24,11 +24,11 @@ const inventorySchema = new mongoose.Schema(
             ref: "User",
             default: null,
         },
-        location: {
-            type: String,
-            enum: ["east", "west"],
-            required: true,
-        },
+        // location: {
+        //     type: String,
+        //     enum: ["east", "west"],
+        //     required: true,
+        // },
 
         rawStock: {
             type: Number,

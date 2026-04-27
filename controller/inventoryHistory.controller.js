@@ -1,17 +1,13 @@
 const InventoryHistory = require("../model/inventoryHistory-model");
 
 
-// GET /inventory/history/:productId?location=east|west
+// GET /inventory/history/:productId
 exports.getInventoryHistory = async (req, res) => {
   try {
     const { productId } = req.params;
-    const { location, vendorId } = req.query;
+    const { vendorId } = req.query;
 
     const filter = { productId };
-
-    if (location) {
-      filter.location = location;
-    }
 
     if (vendorId) {
       filter.performedBy = vendorId;

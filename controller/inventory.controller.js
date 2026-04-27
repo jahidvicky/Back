@@ -2,6 +2,7 @@ const InventoryService = require("../services/inventory.service");
 const Inventory = require("../model/inventory-model");
 const Product = require("../model/product-model");
 const InventoryHistory = require("../model/inventoryHistory-model");
+
 /* ============================
    ADD STOCK
 ============================ */
@@ -29,12 +30,10 @@ exports.getInventoryList = async (req, res) => {
 
     const filter = {};
 
-    // Vendor inventory
     if (vendorId) {
       filter.vendorId = vendorId;
     }
 
-    // Admin-only inventory
     if (createdBy === "admin") {
       filter.createdBy = "admin";
     }
@@ -51,8 +50,6 @@ exports.getInventoryList = async (req, res) => {
     });
   }
 };
-
-
 
 /* ============================
    MOVE TO PROCESSING
@@ -82,7 +79,7 @@ exports.moveToProcessing = async (req, res) => {
 
     await InventoryHistory.create({
       action: "moved_processing",
-      location: inventory.location,
+      // location: inventory.location,
       productId: inventory.productId,
       quantity,
       performedBy: vendorId || "admin"
@@ -94,13 +91,12 @@ exports.moveToProcessing = async (req, res) => {
   }
 };
 
-
 /* ============================
    MOVE TO FINISHED
 ============================ */
 exports.moveToFinished = async (req, res) => {
   try {
-    const { inventoryId, quantity, location, vendorId } = req.body;
+    const { inventoryId, quantity, vendorId } = req.body;
 
     const inventory = await Inventory.findById(inventoryId);
     if (!inventory)
@@ -123,26 +119,30 @@ exports.moveToFinished = async (req, res) => {
 
     await InventoryHistory.create({
       action: "moved_finished",
-      location: inventory.location,
+      // location: inventory.location,
       productId: inventory.productId,
       quantity,
       performedBy: vendorId || "admin"
     });
 
-    const normalizedLocation = (location || "").toLowerCase();
+    // const normalizedLocation = (location || "").toLowerCase();
+
     const product = await Product.findById(inventory.productId);
 
     if (product) {
-      let locs = Array.isArray(product.productLocation)
-        ? product.productLocation
-        : product.productLocation
-          ? [product.productLocation.toLowerCase()]
-          : [];
+      // let locs = Array.isArray(product.productLocation)
+      //   ? product.productLocation
+      //   : product.productLocation
+      //     ? [product.productLocation.toLowerCase()]
+      //     : [];
 
-      if (!locs.includes(normalizedLocation)) locs.push(normalizedLocation);
+      // if (!locs.includes(normalizedLocation)) locs.push(normalizedLocation);
 
       await Product.findByIdAndUpdate(inventory.productId, {
-        $set: { inStock: true, productLocation: locs }
+        $set: {
+          inStock: true,
+          // productLocation: locs
+        }
       });
     }
 
@@ -161,11 +161,11 @@ exports.moveToFinished = async (req, res) => {
 ============================ */
 exports.moveFinishedToOrdered = async (req, res) => {
   try {
-    const { productId, location, quantity, vendorId } = req.body;
+    const { productId, quantity, vendorId } = req.body;
 
     const inventory = await Inventory.findOne({
       productId,
-      location,
+      // location,
       finishedStock: { $gte: quantity }
     });
 
@@ -187,7 +187,7 @@ exports.moveFinishedToOrdered = async (req, res) => {
     await InventoryHistory.create({
       action: "order_placed",
       productId,
-      location,
+      // location,
       quantity,
       performedBy: vendorId || "admin"
     });
@@ -198,18 +198,20 @@ exports.moveFinishedToOrdered = async (req, res) => {
   }
 };
 
-
-
+/* ============================
+   GET AVAILABLE PRODUCTS
+============================ */
 exports.getAvailableProducts = async (req, res) => {
   try {
-    const { location } = req.params;
+    // const { location } = req.params;
     const { scope } = req.query;
 
-    //  GLOBAL for PLP, LOCATION for checkout
-    const inventoryRows =
-      scope === "global"
-        ? await Inventory.find().populate("productId")
-        : await Inventory.find({ location }).populate("productId");
+    // const inventoryRows =
+    //   scope === "global"
+    //     ? await Inventory.find().populate("productId")
+    //     : await Inventory.find().populate("productId"); // removed location filter safely
+
+    const inventoryRows = await Inventory.find().populate("productId");
 
     const grouped = {};
 
@@ -226,23 +228,18 @@ exports.getAvailableProducts = async (req, res) => {
         };
       }
 
-      const raw = i.rawStock || 0;
-      const finished = i.finishedStock || 0;
-
-      grouped[productId].rawAvailable += raw;
-      grouped[productId].finishedAvailable += finished;
+      grouped[productId].rawAvailable += i.rawStock || 0;
+      grouped[productId].finishedAvailable += i.finishedStock || 0;
     });
 
     const products = Object.values(grouped)
       .filter((g) => {
         const category = String(g.product.cat_sec).toLowerCase();
 
-        //  GLASSES → RAW ONLY
         if (category === "glasses") {
           return g.rawAvailable > 0;
         }
 
-        //  SUNGLASSES & CONTACT LENS → FINISHED ONLY
         return g.finishedAvailable > 0;
       })
       .map((g) => {
@@ -268,6 +265,9 @@ exports.getAvailableProducts = async (req, res) => {
   }
 };
 
+/* ============================
+   RESYNC PRODUCT STOCK
+============================ */
 exports.resyncProductStock = async (req, res) => {
   try {
     const inventories = await Inventory.find();
@@ -286,32 +286,31 @@ exports.resyncProductStock = async (req, res) => {
         (i.orderedStock || 0);
 
       grouped[pid].push({
-        location: i.location,
+        // location: i.location,
         available,
       });
     });
 
     for (const productId of Object.keys(grouped)) {
-      // Inside consumeForOrder
       const inventories = await Inventory.find({ productId });
-      const activeLocations = inventories
-        .filter((i) => {
-          const isGlasses = i.category === "glasses";
 
-          const available = isGlasses
-            ? (i.rawStock || 0) +
-            (i.inProcessing || 0) +
-            (i.finishedStock || 0) -
-            (i.orderedStock || 0)
-            : i.finishedStock || 0;
-          return available > 0;
-        })
-        .map((i) => i.location.toLowerCase().trim());
+      const hasStock = inventories.some((i) => {
+        const isGlasses = i.category === "glasses";
+
+        const available = isGlasses
+          ? (i.rawStock || 0) +
+          (i.inProcessing || 0) +
+          (i.finishedStock || 0) -
+          (i.orderedStock || 0)
+          : i.finishedStock || 0;
+
+        return available > 0;
+      });
 
       await Product.findByIdAndUpdate(productId, {
         $set: {
-          productLocation: activeLocations,
-          inStock: activeLocations.length > 0,
+          // productLocation: activeLocations,
+          inStock: hasStock,
         },
       });
     }

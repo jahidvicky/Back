@@ -8,7 +8,7 @@ const inventoryHistorySchema = new mongoose.Schema(
             required: true,
         },
 
-        location: { type: String, required: true },
+        // location: { type: String, required: true },
 
         productId: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
 
