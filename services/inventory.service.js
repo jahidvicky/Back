@@ -21,7 +21,6 @@ exports.addRawStock = async ({ productId, quantity, createdBy, vendorId }) => {
   if (!inventory) {
     inventory = await Inventory.create({
       productId,
-      // location,
       category: product.cat_sec,
       rawStock: requiresLab ? quantity : 0,
       vendorId: vendorId || null,
@@ -39,7 +38,6 @@ exports.addRawStock = async ({ productId, quantity, createdBy, vendorId }) => {
 
   await InventoryHistory.create({
     action: "stock_added",
-    // location,
     productId,
     quantity,
     performedBy: createdBy || "admin"

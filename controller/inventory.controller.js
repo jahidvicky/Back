@@ -79,7 +79,6 @@ exports.moveToProcessing = async (req, res) => {
 
     await InventoryHistory.create({
       action: "moved_processing",
-      // location: inventory.location,
       productId: inventory.productId,
       quantity,
       performedBy: vendorId || "admin"
@@ -119,29 +118,18 @@ exports.moveToFinished = async (req, res) => {
 
     await InventoryHistory.create({
       action: "moved_finished",
-      // location: inventory.location,
       productId: inventory.productId,
       quantity,
       performedBy: vendorId || "admin"
     });
 
-    // const normalizedLocation = (location || "").toLowerCase();
-
     const product = await Product.findById(inventory.productId);
 
     if (product) {
-      // let locs = Array.isArray(product.productLocation)
-      //   ? product.productLocation
-      //   : product.productLocation
-      //     ? [product.productLocation.toLowerCase()]
-      //     : [];
-
-      // if (!locs.includes(normalizedLocation)) locs.push(normalizedLocation);
 
       await Product.findByIdAndUpdate(inventory.productId, {
         $set: {
           inStock: true,
-          // productLocation: locs
         }
       });
     }
@@ -165,7 +153,6 @@ exports.moveFinishedToOrdered = async (req, res) => {
 
     const inventory = await Inventory.findOne({
       productId,
-      // location,
       finishedStock: { $gte: quantity }
     });
 
@@ -187,7 +174,6 @@ exports.moveFinishedToOrdered = async (req, res) => {
     await InventoryHistory.create({
       action: "order_placed",
       productId,
-      // location,
       quantity,
       performedBy: vendorId || "admin"
     });
@@ -203,13 +189,7 @@ exports.moveFinishedToOrdered = async (req, res) => {
 ============================ */
 exports.getAvailableProducts = async (req, res) => {
   try {
-    // const { location } = req.params;
     const { scope } = req.query;
-
-    // const inventoryRows =
-    //   scope === "global"
-    //     ? await Inventory.find().populate("productId")
-    //     : await Inventory.find().populate("productId"); // removed location filter safely
 
     const inventoryRows = await Inventory.find().populate("productId");
 
@@ -286,7 +266,6 @@ exports.resyncProductStock = async (req, res) => {
         (i.orderedStock || 0);
 
       grouped[pid].push({
-        // location: i.location,
         available,
       });
     });

@@ -23,13 +23,6 @@ router.get(
    controller.getAvailableProducts
 );
 
-//  Checkout (location stock)
-// router.get(
-//    "/available-products/:location",
-//    controller.getAvailableProducts
-// );
-
-//  Global products (no location now)
 router.get("/available-products", controller.getAvailableProducts);
 
 /* =========================
