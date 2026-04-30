@@ -276,10 +276,20 @@ const getVendorProducts = async (req, res) => {
 // Controller to fetch all products based on filter
 const getVendorApprovalProducts = async (req, res) => {
   try {
-    const products = await Product.find({
+    const { status } = req.query;
+
+    let query = {
       isSentForApproval: true,
-      productStatus: "Pending",
-    });
+      createdBy: "vendor",
+    };
+
+    // Apply status filter if provided
+    if (status) {
+      query.productStatus = status.charAt(0).toUpperCase() + status.slice(1);
+      // converts "pending" → "Pending"
+    }
+
+    const products = await Product.find(query);
 
     return res.status(200).json({
       success: true,
@@ -377,7 +387,7 @@ const sendApprovedProduct = async (req, res) => {
     }
 
     product.productStatus = "Approved";
-    product.isSentForApproval = false;
+    // product.isSentForApproval = false;
     product.isResubmitted = false;
     product.approvedBy = req.user?.name;
     product.approvedDate = new Date();
@@ -422,7 +432,7 @@ const rejectProduct = async (req, res) => {
 
     product.productStatus = "Rejected";
     product.rejectionReason = req.body.message;
-    product.isSentForApproval = false;
+    // product.isSentForApproval = false;
 
     // Push rejection history
     product.approvalHistory.push({

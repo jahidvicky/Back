@@ -15,6 +15,18 @@ exports.addStock = async (req, res) => {
 
     const inventory = await InventoryService.addRawStock(payload);
 
+    const productId = inventory.productId?._id || inventory.productId;
+
+    const allInventories = await Inventory.find({ productId });
+
+    const totalAvailable = allInventories.reduce((sum, i) => {
+      return sum + (i.rawStock || 0) + (i.inProcessing || 0) + (i.finishedStock || 0) - (i.orderedStock || 0);
+    }, 0);
+
+    await Product.findByIdAndUpdate(productId, {
+      $set: { stockAvailability: Math.max(0, totalAvailable) }
+    });
+
     res.json({ success: true, inventory });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -37,9 +49,8 @@ exports.getInventoryList = async (req, res) => {
     if (createdBy === "admin") {
       filter.createdBy = "admin";
     }
-
     const inventory = await Inventory.find(filter)
-      .populate("productId", "product_name product_variants createdBy")
+      .populate("productId", "product_name product_variants createdBy cat_sec")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, inventory });
@@ -66,13 +77,16 @@ exports.moveToProcessing = async (req, res) => {
       return res.status(403).json({ success: false, message: "Unauthorized" });
     }
 
-    if (inventory.orderedStock < quantity)
+    if (inventory.orderedStock >= quantity) {
+      inventory.orderedStock -= quantity;
+    } else if (inventory.rawStock >= quantity) {
+      inventory.rawStock -= quantity;
+    } else {
       return res.status(400).json({
         success: false,
-        message: "Not enough ordered stock"
+        message: "Not enough stock to send to lab"
       });
-
-    inventory.orderedStock -= quantity;
+    }
     inventory.inProcessing += quantity;
 
     await inventory.save();
@@ -214,24 +228,20 @@ exports.getAvailableProducts = async (req, res) => {
 
     const products = Object.values(grouped)
       .filter((g) => {
-        const category = String(g.product.cat_sec).toLowerCase();
+        const itemCode = String(g.product.itemCode || "").toLowerCase();
+        const isGlasses = itemCode.endsWith("-glasses");
 
-        if (category === "glasses") {
-          return g.rawAvailable > 0;
+        if (isGlasses) {
+          return g.finishedAvailable > 0;  // glasses are available after finishing
         }
 
         return g.finishedAvailable > 0;
       })
       .map((g) => {
-        const category = String(g.product.cat_sec).toLowerCase();
-
-        const availableQty =
-          category === "glasses" ? g.rawAvailable : g.finishedAvailable;
-
         return {
           ...g.product.toObject(),
-          availableQty,
-          inStock: availableQty > 0,
+          availableQty: g.finishedAvailable,
+          inStock: g.finishedAvailable > 0,
         };
       });
 
@@ -274,14 +284,11 @@ exports.resyncProductStock = async (req, res) => {
       const inventories = await Inventory.find({ productId });
 
       const hasStock = inventories.some((i) => {
-        const isGlasses = i.category === "glasses";
+        const isGlasses = String(i.itemCode || "").toLowerCase().endsWith("-glasses");
 
         const available = isGlasses
-          ? (i.rawStock || 0) +
-          (i.inProcessing || 0) +
-          (i.finishedStock || 0) -
-          (i.orderedStock || 0)
-          : i.finishedStock || 0;
+          ? (i.finishedStock || 0) - (i.orderedStock || 0)
+          : (i.finishedStock || 0) - (i.orderedStock || 0);
 
         return available > 0;
       });
