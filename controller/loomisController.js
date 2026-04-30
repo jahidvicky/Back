@@ -2,7 +2,7 @@ const loomisService = require("../services/loomisService");
 const getProvinceFromPostalCode = require("../utils/getProvinceFromPostalCode");
 const Order = require("../model/order-model");
 const Manifest = require("../model/manifest-model");
-const { runEndOfDay } = require("../corn/loomisEndOfDayJob");
+const { runEndOfDay } = require("../corn/loomisendofdayjob");
 
 exports.getRates = async (req, res) => {
     try {

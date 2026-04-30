@@ -6,7 +6,7 @@ const mongoose = require("mongoose");
 const http = require("http");
 const { initChatSocket } = require("./middleware/chatSocket");
 const { initTrackingJob } = require("./corn/loomistrackingjob");
-const { initEndOfDayJob } = require("./corn/loomisEndOfDayJob");
+const { initEndOfDayJob } = require("./corn/loomisendofdayjob");
 
 
 // ***************** Routes ****************
