@@ -5,10 +5,10 @@ const thankYouDonation = require("../utils/thankYouDonation");
 
 exports.createDonation = async (req, res) => {
   try {
-    const { name, email, phone, address, postal, frameType, frameImages } = req.body;
+    const { name, email, phone, address, postal, frameType, frameQuantity, frameImages } = req.body;
 
     //  Required fields check
-    if (!name || !email || !phone || !address || !postal || !frameType) {
+    if (!name || !email || !phone || !address || !postal || !frameType || !frameQuantity) {
       return res.status(400).json({
         success: false,
         message: "All fields are required",
@@ -50,40 +50,70 @@ exports.createDonation = async (req, res) => {
       address,
       postal,
       frameType,
+      frameQuantity,
       frameImages: imageFiles,
     });
 
-    //  Send admin email
-    await sendFrameDonationMail({
-      name,
-      email,
-      phone,
-      address,
-      frameType,
-      frameImages: imageFiles,
-    });
-
-    //  Send thank-you email to donor
-    await sendEmail({
-      to: email,
-      subject: "Thank You for Your Frame Donation",
-      html: thankYouDonation(name),
-    });
-
-    //  FINAL RESPONSE (must be LAST)
-    return res.status(201).json({
+    // Send response immediately
+    res.status(201).json({
       success: true,
       message: "Thank you for donating your frames!",
       donation,
     });
+
+    // Send emails in background
+    (async () => {
+      try {
+        const results = await Promise.allSettled([
+          sendFrameDonationMail({
+            name,
+            email,
+            phone,
+            address,
+            frameType,
+            frameQuantity,
+            frameImages: imageFiles,
+          }),
+
+          sendEmail({
+            to: email,
+            subject: "Thank You for Your Frame Donation",
+            html: thankYouDonation(name),
+          }),
+        ]);
+
+        results.forEach((result, index) => {
+          if (result.status === "fulfilled") {
+            console.log(
+              index === 0
+                ? "Admin email sent successfully"
+                : "Thank-you email sent successfully"
+            );
+          } else {
+            console.error(
+              index === 0
+                ? "Admin email failed:"
+                : "Thank-you email failed:",
+              result.reason
+            );
+          }
+        });
+      } catch (err) {
+        console.error("Background email error:", err);
+      }
+    })();
+
   } catch (error) {
     console.error("Frame Donation Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
   }
-};
+}
 
 // GET ALL (Admin List)
 exports.getAllDonations = async (req, res) => {

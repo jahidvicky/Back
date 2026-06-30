@@ -8,7 +8,7 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-const sendFrameDonationMail = async ({ name, email, phone, address, frameType, frameImages }) => {
+const sendFrameDonationMail = async ({ name, email, phone, address, frameType, frameQuantity, frameImages }) => {
 
   await transporter.sendMail({
     from: `"Atal Optical" <${process.env.EMAIL_USER}>`,
@@ -53,6 +53,10 @@ const sendFrameDonationMail = async ({ name, email, phone, address, frameType, f
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Frame Type: </td>
                 <td style="padding: 8px 0;">${frameType}</td>
+              </tr>
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Frame Quantity: </td>
+                <td style="padding: 8px 0;">${frameQuantity}</td>
               </tr>
               <tr>
                 <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Frame Images: </td>
