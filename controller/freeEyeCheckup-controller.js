@@ -1,4 +1,6 @@
 const FreeEyeCheckup = require("../model/freeEyeCheckup-model");
+const sendEmail = require("../utils/sendEmail");
+const { eyeCheckupUserTemplate, eyeCheckupAdminTemplate } = require("../utils/emailTemplates");
 
 // GET ALL BOOKINGS
 const getEyeCheckup = async (req, res) => {
@@ -65,6 +67,22 @@ const createEyeCheckup = async (req, res) => {
             date,
             message,
         });
+
+        // Send confirmation email to user (only if email provided)
+        if (email) {
+            sendEmail({
+                to: email,
+                subject: "Free Eye Checkup Appointment Confirmed",
+                html: eyeCheckupUserTemplate(newBooking),
+            }).catch((err) => console.error("User email failed:", err.message));
+        }
+
+        // Send notification email to admin
+        sendEmail({
+            to: process.env.ADMIN_EMAIL,
+            subject: "New Free Eye Checkup Booking Received",
+            html: eyeCheckupAdminTemplate(newBooking),
+        }).catch((err) => console.error("Admin email failed:", err.message));
 
         return res.status(201).json({
             success: true,

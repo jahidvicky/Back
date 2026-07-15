@@ -51,8 +51,41 @@ const adminNotificationTemplate = (inquiry) => `
   </div>
 `;
 
+// User Confirmation Template - Free Eye Checkup
+const eyeCheckupUserTemplate = (booking) => `
+  <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
+      <h2 style="color: #f00000;">Hello ${booking.name},</h2>
+      <p>Your Free Eye Checkup appointment has been successfully booked.</p>
+      <ul style="list-style:none; padding:0;">
+          <li><b>Name:</b> ${booking.name}</li>
+          <li><b>Phone:</b> ${booking.phone}</li>
+          <li><b>Date:</b> ${booking.date}</li>
+          ${booking.message ? `<li><b>Message:</b> ${booking.message}</li>` : ""}
+      </ul>
+      <p>Our team will contact you shortly to confirm the schedule.</p>
+      <p style="color: #555;">Best Regards,<br/>Atal Optical</p>
+  </div>
+`;
+
+// Admin Notification Template - Free Eye Checkup
+const eyeCheckupAdminTemplate = (booking) => `
+  <div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd;">
+    <h2 style="color:#d10000;">New Free Eye Checkup Booking</h2>
+    <ul style="list-style:none; padding:0;">
+        <li><b>Name:</b> ${booking.name}</li>
+        <li><b>Email:</b> ${booking.email || "N/A"}</li>
+        <li><b>Phone:</b> ${booking.phone}</li>
+        <li><b>Date:</b> ${booking.date}</li>
+        ${booking.message ? `<li><b>Message:</b> ${booking.message}</li>` : ""}
+    </ul>
+    <p style="color:#555;">Login to the admin panel to view full details.</p>
+  </div>
+`;
+
 module.exports = {
-    inquiryResponseTemplate,
-    inquiryRegisterTemplate,
-    adminNotificationTemplate
+  inquiryResponseTemplate,
+  inquiryRegisterTemplate,
+  adminNotificationTemplate,
+  eyeCheckupUserTemplate,
+  eyeCheckupAdminTemplate
 };
