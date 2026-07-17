@@ -5,6 +5,6 @@ const FreeEyeCheckupSchema = new mongoose.Schema({
     phone: { type: String, required: true },
     date: { type: String, required: true },
     message: { type: String, },
-})
+}, { timestamps: true })
 
 module.exports = mongoose.model("FreeEyeCheckup", FreeEyeCheckupSchema)

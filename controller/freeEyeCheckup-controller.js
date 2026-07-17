@@ -70,19 +70,30 @@ const createEyeCheckup = async (req, res) => {
 
         // Send confirmation email to user (only if email provided)
         if (email) {
-            sendEmail({
-                to: email,
-                subject: "Free Eye Checkup Appointment Confirmed",
-                html: eyeCheckupUserTemplate(newBooking),
-            }).catch((err) => console.error("User email failed:", err.message));
+            try {
+                await sendEmail({
+                    to: email.trim(),
+                    subject: "Free Eye Checkup Appointment Confirmed",
+                    html: eyeCheckupUserTemplate(newBooking),
+                });
+                console.log(`Confirmation email sent to user: ${email}`);
+            } catch (err) {
+                console.error(`User confirmation email FAILED for ${email}:`, err.message);
+            }
+        } else {
+            console.log("No email provided for this booking — skipping user confirmation email.");
         }
 
         // Send notification email to admin
-        sendEmail({
-            to: process.env.ADMIN_EMAIL,
-            subject: "New Free Eye Checkup Booking Received",
-            html: eyeCheckupAdminTemplate(newBooking),
-        }).catch((err) => console.error("Admin email failed:", err.message));
+        try {
+            await sendEmail({
+                to: process.env.ADMIN_EMAIL,
+                subject: "New Free Eye Checkup Booking Received",
+                html: eyeCheckupAdminTemplate(newBooking),
+            });
+        } catch (err) {
+            console.error("Admin notification email FAILED:", err.message);
+        }
 
         return res.status(201).json({
             success: true,

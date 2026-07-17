@@ -7,6 +7,7 @@ router.post("/addDoctor", upload.single("image"), doctorController.createDoctor)
 router.get("/getDoctor", doctorController.getDoctors);
 router.put("/updateDoctor/:id", upload.single("image"), doctorController.updateDoctor);
 router.delete("/deleteDoctor/:id", doctorController.deleteDoctor);
+router.get("/doctor/:id/availability", doctorController.getDoctorAvailability);
 
 // Schedule / Availability routes
 router.get("/getSchedule/:id/schedule", doctorController.getSchedule);

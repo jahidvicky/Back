@@ -13,7 +13,10 @@ const doctorSchema = new mongoose.Schema({
     specialization: { type: String },
     exam_section: { type: String },
     exams: [{ type: mongoose.Schema.Types.ObjectId, ref: "Exam" }],
-    schedule: [scheduleSchema]
+    clinic: { type: mongoose.Schema.Types.ObjectId, ref: "Clinic", required: true },
+    // Optional override — if empty, doctor uses clinic.days
+    workingDays: { type: [String], default: [] },
+    schedule: [scheduleSchema] // kept for backward compat, no longer drives availability
 }, { timestamps: true });
 
 module.exports = mongoose.model("Doctor", doctorSchema);

@@ -7,6 +7,7 @@ const http = require("http");
 const { initChatSocket } = require("./middleware/chatSocket");
 const { initTrackingJob } = require("./corn/loomistrackingjob");
 const { initEndOfDayJob } = require("./corn/loomisendofdayjob");
+const { initAppointmentReminderJob } = require("./corn/appointmentReminderJob");
 
 
 // ***************** Routes ****************
@@ -36,6 +37,8 @@ const orderRoutes = require("./routes/order-routes");
 const invoiceRoutes = require("./routes/invoice-routes");
 const examRoutes = require("./routes/exam-routes");
 const doctorRoutes = require("./routes/doctor-routes");
+const clinicRoutes = require("./routes/clinic-routes");
+const appointmentRoutes = require("./routes/appointment-routes");
 const couponRoutes = require("./routes/coupon-code-router");
 const insurancePolicy = require("./routes/insurancePolicyRoutes");
 const insuranceClaim = require("./routes/insuranceClaimRoutes");
@@ -134,6 +137,8 @@ app.use("/api", orderRoutes);
 app.use("/api", invoiceRoutes);
 app.use("/api", examRoutes);
 app.use("/api", doctorRoutes);
+app.use("/api", clinicRoutes);
+app.use("/api", appointmentRoutes);
 app.use("/api", couponRoutes);
 app.use("/api", insurancePolicy);
 app.use("/api", insuranceClaim);
@@ -159,6 +164,7 @@ mongoose
 
     initTrackingJob();
     initEndOfDayJob();
+    initAppointmentReminderJob();
 
     server.listen(PORT, () => {
       console.log(`Server started on Port: ${PORT}`);

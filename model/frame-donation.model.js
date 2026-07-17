@@ -10,7 +10,6 @@ const frameDonationSchema = new mongoose.Schema(
         frameQuantity: { type: Number, required: true },
         frameImages: {
             type: [String],
-            required: true,
         },
     },
     { timestamps: true }
