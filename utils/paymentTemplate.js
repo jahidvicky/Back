@@ -5,16 +5,21 @@ function paymentTemplate(order) {
       <p>Your order has been placed successfully at <b>ATAL OPTICALS</b>.</p>
 
       <!-- ORDER SUMMARY -->
-      <h3 style="margin-top:20px;">Order Summary</h3>
+  <h3 style="margin-top:20px;">Order Summary</h3>
       <table style="width:100%; border-collapse: collapse; margin-top:10px;">
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Order Number</b></td>
           <td style="padding:8px; border:1px solid #ddd;">${order.orderNumber}</td>
         </tr>
+        ${order.shippingInfo?.trackingNumber
+      ? `
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Tracking Number</b></td>
-          <td style="padding:8px; border:1px solid #ddd;">${order.shippingInfo?.trackingNumber}</td>
+          <td style="padding:8px; border:1px solid #ddd;">${order.shippingInfo.trackingNumber}</td>
         </tr>
+        `
+      : ""
+    }
         <tr>
           <td style="padding:8px; border:1px solid #ddd;"><b>Order Date</b></td>
           <td style="padding:8px; border:1px solid #ddd;">${new Date(order.createdAt).toLocaleString()}</td>
