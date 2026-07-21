@@ -1,6 +1,6 @@
+const mongoose = require("mongoose");
 const Appointment = require("../model/appointment-model");
 const Doctor = require("../model/doctor-model");
-const mongoose = require("mongoose");
 const transporter = require("../utils/mailer");
 const appointmentTemplate = require("../utils/appointmentTemplate");
 
@@ -76,11 +76,13 @@ exports.cancelAppointment = async (req, res) => {
         const existing = await Appointment.findById(req.params.id);
         if (!existing) return res.status(404).json({ success: false, message: "Appointment not found" });
 
-        // If a customer is cancelling, make sure it's actually their own appointment
+        // Customers are no longer allowed to self-cancel online.
+        // Only admin/clinic staff can cancel an appointment.
         if (cancelledBy === "user") {
-            if (!custId || !existing.custId || existing.custId.toString() !== custId) {
-                return res.status(403).json({ success: false, message: "You can only cancel your own appointments" });
-            }
+            return res.status(403).json({
+                success: false,
+                message: "Online cancellation isn't available. Please call or email us to cancel or reschedule your appointment."
+            });
         }
 
         const appointment = await Appointment.findByIdAndUpdate(
@@ -157,15 +159,24 @@ exports.rescheduleAppointment = async (req, res) => {
         const old = await Appointment.findById(req.params.id);
         if (!old) return res.status(404).json({ success: false, message: "Appointment not found" });
 
-        // Ownership check only applies when a customer (not admin) is the one calling this
+        // Customers cannot self-reschedule an active booking online — they must
+        // call or email us for that. The one exception: if the CLINIC already
+        // cancelled this appointment, the customer picking a new slot is treated
+        // as a rebooking (not a self-service cancel/reschedule), so it's allowed.
         if (custId) {
             if (!old.custId || old.custId.toString() !== custId) {
                 return res.status(403).json({ success: false, message: "You can only reschedule your own appointments" });
             }
+            if (old.cancelledBy !== "admin") {
+                return res.status(403).json({
+                    success: false,
+                    message: "Online rescheduling isn't available. Please call or email us to reschedule your appointment."
+                });
+            }
         }
 
         old.status = "cancelled";
-        if (!old.cancelledBy) old.cancelledBy = custId ? "user" : "admin";
+        if (!old.cancelledBy) old.cancelledBy = "admin";
         await old.save();
 
         const newAppointment = new Appointment({

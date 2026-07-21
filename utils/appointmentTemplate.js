@@ -58,16 +58,26 @@ module.exports = ({ name, doctorName, appointmentDate, examType, weekday, type, 
           </tr>
         </table>
 
-      <p style="margin-top: 20px; font-size: 15px; line-height: 1.5;">
+ <p style="margin-top: 20px; font-size: 15px; line-height: 1.5;">
           ${isCancelledCustomer
       ? `If this was a mistake or you'd like to rebook, please contact us or book a new appointment anytime.`
       : isCancelledAdmin
         ? `Please log in to your admin panel to view updated appointment records.`
         : isAdmin
           ? `Please log in to your admin panel to review the appointment details.`
-          : `We look forward to seeing you soon. If you need to reschedule, please contact us.`
+          : `We look forward to seeing you soon. To cancel or reschedule, please call or email us — this cannot be done online.`
     }
         </p>
+
+     ${(!isAdmin && !isCancelledAdmin) ? `
+        <div style="margin-top: 20px; padding: 12px 15px; background-color: #fef2f2; border: 1px solid #fca5a5; border-radius: 6px;">
+          <p style="margin: 0; font-size: 14px; color: #991b1b;">
+            <strong>Cancellation Policy:</strong> A $50 fee applies to cancelled appointments.
+            To cancel or reschedule, please call us at <strong>1866-242-3545</strong> or email
+            <strong>info.ataloptical@gmail.com</strong> — online cancellation is not available.
+          </p>
+        </div>
+        ` : ``}
 
         <p style="margin-top: 20px; font-size: 15px;">Thank you,<br><strong>Atal Opticals</strong></p>
       </div>
