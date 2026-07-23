@@ -105,10 +105,7 @@ const addInquiry = async (req, res) => {
       });
     }
 
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: "A PDF document is required." });
-    }
-    if (req.file.mimetype !== "application/pdf") {
+    if (req.file && req.file.mimetype !== "application/pdf") {
       return res.status(400).json({ success: false, message: "Only PDF files are allowed." });
     }
 
@@ -140,7 +137,7 @@ const addInquiry = async (req, res) => {
       vendorType: userType === "vendor" ? vendorType : undefined,
       registrationNumber: userType === "company" ? registrationNumber.trim() : undefined,
       message: message?.trim() || "",
-      uploadDocument: req.file.filename,
+      uploadDocument: req.file ? req.file.filename : undefined,
     });
 
     await newInquiry.save();
