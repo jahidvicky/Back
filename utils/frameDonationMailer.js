@@ -33,42 +33,40 @@ const sendFrameDonationMail = async ({ name, email, phone, address, frameType, f
               <b>Frame Donation</b> section.
             </p>
 
-            <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; width: 120px;">Name: </td>
-                <td style="padding: 8px 0;">${name}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Email: </td>
-                <td style="padding: 8px 0;">${email}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold;">Phone: </td>
-                <td style="padding: 8px 0;">${phone}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Address: </td>
-                <td style="padding: 8px 0;">${address}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Frame Type: </td>
-                <td style="padding: 8px 0;">${frameType}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Frame Quantity: </td>
-                <td style="padding: 8px 0;">${frameQuantity}</td>
-              </tr>
-              <tr>
-                <td style="padding: 8px 0; font-weight: bold; vertical-align: top;">Frame Images: </td>
-                <td style="padding: 8px 0;">
-                    ${frameImages?.map((img) => `
+                       <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; font-size: 14px;">
+              ${[
+                { label: "Name", value: name },
+                { label: "Email", value: email },
+                { label: "Phone", value: phone },
+                { label: "Address", value: address },
+                { label: "Frame Type", value: frameType },
+                { label: "Frame Quantity", value: frameQuantity },
+                {
+                  label: "Frame Images",
+                  value:
+                    frameImages && frameImages.length > 0
+                      ? frameImages
+                          .map(
+                            (img) => `
                           <img 
                           src="https://api.ataloptical.org/uploads/${img}" 
                           alt="frame" 
                           style="width: 120px; height: 120px; object-fit: cover; border-radius: 6px; margin-right: 8px; margin-bottom: 8px; border: 1px solid #ddd;"
-                         />`).join("")}
-                </td>
-              </tr>
+                         />`
+                          )
+                          .join("")
+                      : null,
+                },
+              ]
+                .filter((field) => field.value !== undefined && field.value !== null && field.value !== "")
+                .map(
+                  (field) => `
+              <tr>
+                <td style="padding: 8px 0; font-weight: bold; width: 120px; vertical-align: top;">${field.label}: </td>
+                <td style="padding: 8px 0;">${field.value}</td>
+              </tr>`
+                )
+                .join("")}
             </table>
 
             <div style="margin-top: 20px; padding: 12px; background-color: #f9fafb; border-left: 4px solid #f00000;">
