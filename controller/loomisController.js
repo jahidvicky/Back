@@ -276,6 +276,13 @@ GET SHIPPING LABEL
 exports.getLabel = async (req, res) => {
     const { id } = req.params;
     const format = (req.query.format || "PNG").toUpperCase();
+
+    // Labels can change (re-created after void), so never let the browser
+    // or any intermediate proxy cache/reuse a stale response for this URL.
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
     try {
         const order = await Order.findOne({ "shippingInfo.labelId": id });
 
@@ -283,6 +290,7 @@ exports.getLabel = async (req, res) => {
         if (format === "PNG" && order?.shippingInfo?.cachedLabelBase64) {
             const buffer = Buffer.from(order.shippingInfo.cachedLabelBase64, "base64");
             res.setHeader("Content-Type", "image/png");
+            res.setHeader("Content-Length", buffer.length);
             res.setHeader("Content-Disposition", `inline; filename=label-${id}.png`);
             return res.send(buffer);
         }
@@ -293,6 +301,14 @@ exports.getLabel = async (req, res) => {
         if (format === "PNG") {
             // Single package — send first buffer
             const buffer = labels[0];
+
+            if (!buffer || buffer.length === 0) {
+                console.error("[getLabel] Loomis returned an empty label buffer for id:", id);
+                return res.status(502).json({
+                    success: false,
+                    message: "Loomis returned an empty label. Please try again.",
+                });
+            }
 
             // Cache it
             if (order) {
@@ -306,6 +322,7 @@ exports.getLabel = async (req, res) => {
             }
 
             res.setHeader("Content-Type", "image/png");
+            res.setHeader("Content-Length", buffer.length);
             res.setHeader("Content-Disposition", `inline; filename=label-${id}.png`);
             return res.send(buffer);
         }

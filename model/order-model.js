@@ -19,9 +19,9 @@ const shippingInfoSchema = new mongoose.Schema({
 
   manifestNum: { type: String, default: null },
 
-  serviceCode: { type: String, default: null },       // ← WAS MISSING
+  serviceCode: { type: String, default: null },
   serviceType: { type: String, default: "DD" },
-  serviceName: { type: String, default: null },       // ← WAS MISSING
+  serviceName: { type: String, default: null },
   rateCharged: { type: Number, default: null },
 
   originPostalCode: String,

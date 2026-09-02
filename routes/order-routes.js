@@ -14,6 +14,13 @@ router.get("/order/return-requests", orderController.getReturnRequests);        
 router.post("/order/return/approve/:orderId", orderController.approveReturn);   // admin
 router.post("/order/return/reject/:orderId", orderController.rejectReturn);     // admin
 
+router.get(
+  "/vendor-orders/:id",
+  protect,
+  allowRoles("vendor"),
+  orderController.getVendorOrderById
+);
+
 router.get("/order/:id", orderController.getOrderById);
 
 router.get(

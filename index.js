@@ -55,6 +55,7 @@ const inventoryHistory = require("./routes/inventory-history-routes");
 const loomisRoutes = require("./routes/loomisRoutes");
 const freeEyeCheckup = require("./routes/freeEyeCheckup-routes")
 const locationRoutes = require("./routes/locationRoutes")
+const policyRoutes = require("./routes/policy-routes")
 
 require("./corn/PolicyExpiryJob");
 
@@ -155,7 +156,8 @@ app.use("/api", inventoryHistory);
 app.use("/api/shipping", loomisRoutes);
 app.use("/api", freeEyeCheckup);
 app.use("/api/location", locationRoutes);
-
+app.use("/api", policyRoutes);
+  
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;
 
