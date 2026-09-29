@@ -528,27 +528,15 @@ exports.trackOrderByTrackingNumber = async (req, res) => {
 
 exports.getAllOrders = async (req, res) => {
   try {
-    // Fetch all orders, latest first
+    // Admin manages shipping/Loomis for every order — both admin-created
+    // and vendor-created products — so no createdBy filtering here.
     const orders = await Order.find().sort({ createdAt: -1 });
 
-    // Filter orders where at least one cartItem is created by admin
-    const adminOrders = orders.filter((order) =>
-      order.cartItems.some(
-        (item) => item.createdBy && item.createdBy === "admin"
-      )
-    );
-
     let updatedOrders = [];
-    for (let order of adminOrders) {
+    for (let order of orders) {
       const changed = checkAndUpdateExpiredPolicies(order);
       if (changed) await order.save();
       updatedOrders.push(order);
-    }
-
-    if (!updatedOrders.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No admin orders found" });
     }
 
     res.json({ success: true, orders: updatedOrders });
@@ -556,7 +544,7 @@ exports.getAllOrders = async (req, res) => {
     console.error("Get Orders Error:", err);
     res
       .status(500)
-      .json({ success: false, message: "Failed to fetch admin orders" });
+      .json({ success: false, message: "Failed to fetch orders" });
   }
 };
 
@@ -587,6 +575,34 @@ exports.getAllVendorOrders = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to fetch vendor orders" });
+  }
+};
+
+
+exports.getVendorOrderById = async (req, res) => {
+  try {
+    const vendorId = req.user._id;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    const belongsToVendor = order.cartItems.some(
+      (item) => item.vendorID?.toString() === vendorId.toString()
+    );
+
+    if (!belongsToVendor) {
+      return res.status(403).json({ success: false, message: "Not authorized to view this order" });
+    }
+
+    const changed = checkAndUpdateExpiredPolicies(order);
+    if (changed) await order.save();
+
+    res.json({ success: true, order });
+  } catch (err) {
+    console.error("Get Vendor Order Error:", err);
+    res.status(500).json({ success: false, message: "Failed to fetch order" });
   }
 };
 

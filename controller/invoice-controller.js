@@ -14,8 +14,14 @@ exports.getInvoice = async (req, res) => {
     const templatePath = path.join(__dirname, "../views/invoice.ejs");
     const html = await ejs.renderFile(templatePath, { order });
     const browser = await puppeteer.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
+      headless: "new",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--single-process",
+      ],
     });
 
 
@@ -37,8 +43,10 @@ exports.getInvoice = async (req, res) => {
 
     return res.send(pdfBuffer);
 
-  } catch (error) {
+   } catch (error) {
     console.error("Invoice generation error:", error);
-    return res.status(500).send("Failed to generate invoice");
+    return res.status(500).send(
+      `Failed to generate invoice: ${error.message}`
+    );
   }
-};
+}
