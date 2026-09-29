@@ -1,3 +1,23 @@
+const dayjs = require("dayjs");
+const customParseFormat = require("dayjs/plugin/customParseFormat");
+dayjs.extend(customParseFormat);
+
+
+const esc = (s = "") =>
+    String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+const fmtDate = (d) =>
+    d ? dayjs(String(d), "YYYYMMDD").format("dddd, MMM D, YYYY") : "-";
+
+const fmtTime = (t) =>
+    t && String(t).length === 4
+        ? dayjs(String(t), "HHmm").format("h:mm A")
+        : t || "-";
+
 const pickupScheduledEmail = ({
     name,
     pickupDate,
@@ -33,7 +53,7 @@ const pickupScheduledEmail = ({
         </h3>
 
         <p>
-            Hello ${name},
+            Hello ${esc(name)},
         </p>
 
         <p>
@@ -45,23 +65,23 @@ const pickupScheduledEmail = ({
 
         <p>
             <strong>Pickup Date:</strong>
-            ${pickupDate}
+            ${esc(fmtDate(pickupDate))}
         </p>
 
         <p>
             <strong>Pickup Time:</strong>
-            ${readyTime} - ${closeTime}
+            ${esc(fmtTime(readyTime))} - ${esc(fmtTime(closeTime))}
         </p>
 
         <p>
             <strong>Loomis Confirmation ID:</strong>
-            ${confirmationId}
+            ${esc(confirmationId || "-")}
         </p>
 
         <br>
 
         <a
-            href="${pickupUrl}"
+            href="${esc(pickupUrl)}"
             style="
                 display:inline-block;
                 background:#c60001;
