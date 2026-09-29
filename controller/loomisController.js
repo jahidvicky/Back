@@ -464,6 +464,169 @@ exports.schedulePickup = async (req, res) => {
 
 /*
 ================================
+SCHEDULE FRAME DONATION PICKUP
+================================
+*/
+exports.scheduleFrameDonationPickup = async (req, res) => {
+    try {
+        const { donationId } = req.params;
+        const {
+            pickupDate,
+            readyTime,
+            closeTime,
+        } = req.body;
+
+        // 1. Validate pickup information
+        if (!pickupDate || !readyTime || !closeTime) {
+            return res.status(400).json({
+                success: false,
+                message: "pickupDate, readyTime, and closeTime are required",
+            });
+        }
+
+        if (!/^\d{8}$/.test(pickupDate)) {
+            return res.status(400).json({
+                success: false,
+                message: "pickupDate must be in YYYYMMDD format",
+            });
+        }
+
+        const timeRegex = /^\d{2}:\d{2}$/;
+
+        if (!timeRegex.test(readyTime) || !timeRegex.test(closeTime)) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "readyTime and closeTime must be in HH:MM format",
+            });
+        }
+
+        // 2. Load frame donation
+        const FrameDonation = require("../model/frame-donation.model");
+
+        const donation = await FrameDonation.findById(donationId);
+
+        if (!donation) {
+            return res.status(404).json({
+                success: false,
+                message: "Frame donation not found",
+            });
+        }
+
+        // 3. Prevent duplicate pickup
+        if (donation.pickupInfo?.confirmationNumber) {
+            return res.status(400).json({
+                success: false,
+                message: `Pickup already scheduled. Confirmation: ${donation.pickupInfo.confirmationNumber}`,
+            });
+        }
+
+        // 4. Calculate approximate weight
+        // Later you can change this if you collect actual weight.
+        const totalPieces = Number(donation.frameQuantity) || 1;
+
+        const totalWeight =
+            Math.max(totalPieces * 0.5, 1);
+
+        // 5. Get customer province from postal code
+        const postalCode = String(donation.postal || "")
+            .replace(/\s/g, "")
+            .toUpperCase();
+
+        const customerProvince =
+            getProvinceFromPostalCode(postalCode);
+
+        if (!customerProvince) {
+            return res.status(400).json({
+                success: false,
+                message: "Could not determine province from customer postal code",
+            });
+        }
+
+        // 6. Call Loomis
+        const pickup =
+            await loomisService.scheduleFrameDonationPickup({
+                pickupDate,
+                readyTime,
+                closeTime,
+
+                // CUSTOMER = PICKUP LOCATION
+                customerName: donation.name,
+                customerEmail: donation.email,
+                customerPhone: donation.phone,
+                customerAddress: donation.street || donation.address,
+                customerCity: donation.city || "",
+                customerPostal: postalCode,
+                customerProvince,
+
+                totalPieces,
+                totalWeight,
+
+                comments:
+                    `Frame donation pickup. Donation ID: ${donation._id}`,
+            });
+
+        // 7. Save Loomis pickup information
+        donation.pickupInfo = {
+            confirmationNumber: pickup.confirmationNumber,
+            pickupDate,
+            readyTime,
+            closeTime,
+            scheduledAt: new Date(),
+            pickedUpOn: null,
+            rawResponse: pickup.rawResponse,
+        };
+
+        // 8. Update donation status
+        donation.status = "Pickup Scheduled";
+
+        // 9. Save tracking/history information
+        if (!Array.isArray(donation.trackingHistory)) {
+            donation.trackingHistory = [];
+        }
+
+        donation.trackingHistory.push({
+            status: "Pickup Scheduled",
+            message:
+                `Free Loomis pickup scheduled for ${pickupDate} between ${readyTime}-${closeTime}. Confirmation: ${pickup.confirmationNumber}`,
+            updatedBy: "Admin",
+            actorName: "Admin",
+            updatedAt: new Date(),
+        });
+
+        await donation.save();
+
+        // 10. Response
+        return res.status(200).json({
+            success: true,
+            message: "Free frame donation pickup scheduled successfully",
+            confirmationNumber: pickup.confirmationNumber,
+            pickupDate,
+            readyTime,
+            closeTime,
+        });
+
+    } catch (error) {
+        console.error(
+            "FRAME DONATION PICKUP ERROR:",
+            {
+                message: error.message,
+                stack: error.stack,
+            }
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to schedule frame donation pickup",
+            error: error.message,
+        });
+    }
+};
+
+
+
+/*
+================================
 VOID SHIPMENT
 ================================
 */

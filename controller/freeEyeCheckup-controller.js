@@ -6,38 +6,38 @@ const { eyeCheckupUserTemplate, eyeCheckupAdminTemplate } = require("../utils/em
 
 // Calculate age from a DOB string (server-side, tamper-proof)
 const calculateAgeFromDob = (dobStr) => {
-  const dob = new Date(dobStr);
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const monthDiff = today.getMonth() - dob.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-    age--;
-  }
-  return age;
+    const dob = new Date(dobStr);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--;
+    }
+    return age;
 };
 
 // Shared helper — determines eligibility + reason, checked against the
 // customer's PREFERRED VISIT DATE (not "today"), so a booking made now
 // for a date after the festival ends is correctly rejected.
 const checkEligibility = (age, settings, preferredDate) => {
-  const visitDate = new Date(preferredDate);
+    const visitDate = new Date(preferredDate);
 
-  const festivalCoversVisit =
-    settings.festivalActive &&
-    settings.startDate &&
-    settings.endDate &&
-    visitDate >= new Date(settings.startDate) &&
-    visitDate <= new Date(settings.endDate);
+    const festivalCoversVisit =
+        settings.festivalActive &&
+        settings.startDate &&
+        settings.endDate &&
+        visitDate >= new Date(settings.startDate) &&
+        visitDate <= new Date(settings.endDate);
 
-  if (festivalCoversVisit) {
-    return { eligible: true, reason: "festival", festivalName: settings.festivalName };
-  }
+    if (festivalCoversVisit) {
+        return { eligible: true, reason: "festival", festivalName: settings.festivalName };
+    }
 
-  if (age < settings.ageMin || age > settings.ageMax) {
-    return { eligible: true, reason: "age" };
-  }
+    if (age < settings.ageMin || age > settings.ageMax) {
+        return { eligible: true, reason: "age" };
+    }
 
-  return { eligible: false, reason: null };
+    return { eligible: false, reason: null };
 };
 
 
@@ -98,7 +98,7 @@ const createEyeCheckup = async (req, res) => {
             });
         }
 
-            // Eligibility check — based on the customer's PREFERRED VISIT DATE,
+        // Eligibility check — based on the customer's PREFERRED VISIT DATE,
         // so a booking made today for a date after the festival ends is
         // correctly rejected (unless they qualify by age anyway).
         const settings = await EyeCheckupSettings.getSingleton();
@@ -130,7 +130,7 @@ const createEyeCheckup = async (req, res) => {
             });
         }
 
-             // Date validation
+        // Date validation
         if (isNaN(new Date(date))) {
             return res.status(400).json({
                 success: false,
@@ -150,7 +150,7 @@ const createEyeCheckup = async (req, res) => {
             });
         }
 
-           const newBooking = await FreeEyeCheckup.create({
+        const newBooking = await FreeEyeCheckup.create({
             name,
             email,
             phone,

@@ -554,6 +554,8 @@ exports.createReturnShipment = async (data) => {
     };
 
     const [result] = await client.processPickUpTagAsync(args);
+
+
     //  HANDLE ERROR PROPERLY
     if (result?.return?.error) {
         console.error("Loomis Error:", result.return.error);
@@ -785,7 +787,7 @@ exports.cancelPickup = async (confirmationNumber) => {
 // ================================
 // GET PICKUP DAY
 // ================================
-exports.getPickupDay = async ({ fromDate, numOfDays = 7 }) => {
+exports.getPickupDay = async ({ fromDate, numOfDays = 7, postalCode }) => {
     const client = await createClient(trackingURL);
 
     const args = {
@@ -795,7 +797,7 @@ exports.getPickupDay = async ({ fromDate, numOfDays = 7 }) => {
             shipper_num: process.env.LOOMIS_ACCOUNT,
             from_date: fromDate || dayjs().format("YYYYMMDD"),
             num_of_days: Math.min(Math.max(Number(numOfDays), 1), 7),
-            postal_code: WAREHOUSE.postalCode,
+            postal_code: (postalCode || WAREHOUSE.postalCode).replace(/\s/g, "").toUpperCase(),
         },
     };
 
@@ -833,40 +835,99 @@ exports.getPickupDay = async ({ fromDate, numOfDays = 7 }) => {
 // ================================
 // SEARCH PICKUP BY ID
 // ================================
+
 exports.searchPickupById = async (confirmationId) => {
-    const client = await createClient(trackingURL);
+    if (!confirmationId) {
+        throw new Error(
+            "Pickup confirmation ID is required"
+        );
+    }
+
+    const numericId = Number(confirmationId);
+
+    if (!Number.isFinite(numericId) || numericId <= 0) {
+        throw new Error(
+            `Invalid Loomis pickup confirmation ID: ${confirmationId}`
+        );
+    }
+
+    const client =
+        await createClient(trackingURL);
 
     const args = {
         request: {
-            user_id: process.env.LOOMIS_USERNAME,
-            password: process.env.LOOMIS_PASSWORD,
-            shipper_num: process.env.LOOMIS_ACCOUNT,
-            id: Number(confirmationId),
+            user_id:
+                process.env.LOOMIS_USERNAME,
+
+            password:
+                process.env.LOOMIS_PASSWORD,
+
+            shipper_num:
+                process.env.LOOMIS_ACCOUNT,
+
+            id: numericId,
         },
     };
 
-    const [result] = await client.searchPickupByIdAsync(args);
+    const [result] =
+        await client.searchPickupByIdAsync(args);
 
-    const error = result?.return?.error;
-    if (error && String(error).toLowerCase() !== "null") {
-        throw new Error(`Loomis searchPickupById error: ${error}`);
+    const error =
+        result?.return?.error;
+
+    if (
+        error &&
+        String(error).toLowerCase() !== "null"
+    ) {
+        throw new Error(
+            `Loomis searchPickupById error: ${error}`
+        );
     }
 
-    const pickup = result?.return?.pickup;
-    if (!pickup) throw new Error("No pickup found for this confirmation ID");
+    const pickup =
+        result?.return?.pickup;
+
+    if (!pickup) {
+        throw new Error(
+            "No pickup found for this confirmation ID"
+        );
+    }
 
     return {
-        confirmationId: String(pickup.id),
-        pickupDate: pickup.pickup_date,
-        readyTime: pickup.ready_time,
-        closingTime: pickup.closing_time,
-        numberOfParcels: pickup.number_of_parcels,
-        weight: pickup.weight,
-        cancelledBy: pickup.canceled_by || null,
-        cancelledOn: pickup.canceled_on || null,
-        pickedUpOn: pickup.picked_up_on || null,
-        comments: pickup.comments || null,
-        rawResponse: result,
+        confirmationId:
+            pickup.id
+                ? String(pickup.id)
+                : String(confirmationId),
+
+        pickupDate:
+            pickup.pickup_date || null,
+
+        readyTime:
+            pickup.ready_time || null,
+
+        closingTime:
+            pickup.closing_time || null,
+
+        numberOfParcels:
+            pickup.number_of_parcels || 0,
+
+        weight:
+            pickup.weight || 0,
+
+        cancelledBy:
+            pickup.canceled_by || null,
+
+        cancelledOn:
+            pickup.canceled_on || null,
+
+        pickedUpOn:
+            pickup.picked_up_on || null,
+
+        comments:
+            pickup.comments || null,
+
+        rawResponse:
+            result,
     };
 };
 
@@ -955,5 +1016,327 @@ exports.trackByReference = async ({ reference, days, postalCode, shipperNum }) =
             dateTime: e.local_date_time,
             imageUrl: e.image_url || null,
         })),
+    };
+};
+
+
+// ======================================================
+// SCHEDULE FRAME DONATION PICKUP
+// Customer = Pickup Location
+// ATAL OPTICAL = Shipper / Account
+// ======================================================
+
+exports.scheduleFrameDonationPickup = async (data, attempt = 1) => {
+    const sleep = (ms) =>
+        new Promise((resolve) => setTimeout(resolve, ms));
+
+    const fmt = (time) =>
+        String(time || "").replace(":", "");
+
+    if (!process.env.ADMIN_EMAIL) {
+        throw new Error("ADMIN_EMAIL is not configured");
+    }
+
+    if (!data.pickupDate) {
+        throw new Error("Pickup date is required");
+    }
+
+    if (!data.readyTime) {
+        throw new Error("Pickup ready time is required");
+    }
+
+    if (!data.closeTime) {
+        throw new Error("Pickup closing time is required");
+    }
+
+    try {
+        const client = await createClient(trackingURL);
+
+        const pickupPostal = String(data.customerPostal || "")
+            .replace(/\s/g, "")
+            .toUpperCase();
+
+        if (!pickupPostal) {
+            throw new Error("Customer postal code is required");
+        }
+
+        if (!String(data.customerCity || "").trim()) {
+            throw new Error("Customer city is required");
+        }
+
+        if (!/^[A-Z]{2}$/.test(String(data.customerProvince || "").toUpperCase())) {
+            throw new Error("Customer province must be a 2-letter code (e.g. ON)");
+        }
+
+        const args = {
+            request: {
+                user_id: process.env.LOOMIS_USERNAME,
+                password: process.env.LOOMIS_PASSWORD,
+
+                pickup: {
+                    shipper_num: process.env.LOOMIS_ACCOUNT,
+                    courier: "L",
+
+                    pickup_date: data.pickupDate,
+
+                    ready_time: fmt(data.readyTime),
+
+                    closing_time: fmt(data.closeTime),
+
+                    // ==================================
+                    // CUSTOMER = PICKUP LOCATION
+                    // ==================================
+
+                    pickup_name:
+                        String(data.customerName || "")
+                            .slice(0, 40),
+
+                    pickup_address_line_1:
+                        String(data.customerAddress || "")
+                            .slice(0, 40),
+
+                    pickup_city:
+                        String(data.customerCity || "")
+                            .slice(0, 40),
+
+                    pickup_province:
+                        String(data.customerProvince || "")
+                            .slice(0, 2)
+                            .toUpperCase(),
+
+                    pickup_postal_code:
+                        pickupPostal,
+
+                    pickup_phone:
+                        String(data.customerPhone || ""),
+
+                    pickup_email:
+                        data.customerEmail ||
+                        process.env.ADMIN_EMAIL,
+
+                    pickup_attention:
+                        String(data.customerName || "")
+                            .slice(0, 40),
+
+                    pickup_location: "",
+
+                    pickup_address_line_2: "",
+
+                    pickup_extension: "",
+
+                    comments:
+                        data.comments ||
+                        `Frame donation pickup for Atal Optical. Donation: ${data.donationId || ""}`,
+
+                    collect: false,
+
+                    number_of_parcels: Math.min(
+                        Math.max(
+                            Number(data.totalPieces) || 1,
+                            1
+                        ),
+                        99
+                    ),
+
+                    weight: Math.max(
+                        Number(data.totalWeight) || 1,
+                        0.1
+                    ),
+
+                    unit_of_measure: "L",
+                },
+            },
+        };
+
+        const [result] =
+            await client.schedulePickupAsync(args);
+
+        const loomisError =
+            result?.return?.error;
+
+        if (
+            loomisError &&
+            String(loomisError).toLowerCase() !== "null"
+        ) {
+            throw new Error(
+                `Loomis schedule pickup error: ${loomisError}`
+            );
+        }
+
+        const pickup =
+            result?.return?.pickup;
+
+        if (!pickup) {
+            throw new Error(
+                "Invalid Loomis response - no pickup object returned"
+            );
+        }
+
+        const confirmationNumber =
+            pickup?.id
+                ? String(pickup.id)
+                : null;
+
+        if (!confirmationNumber) {
+            throw new Error(
+                "Loomis did not return pickup confirmation ID"
+            );
+        }
+
+        return {
+            confirmationNumber,
+
+            pickupDate:
+                data.pickupDate,
+
+            readyTime:
+                data.readyTime,
+
+            closeTime:
+                data.closeTime,
+
+            customerName:
+                data.customerName,
+
+            customerAddress:
+                data.customerAddress,
+
+            customerCity:
+                data.customerCity,
+
+            customerProvince:
+                data.customerProvince,
+
+            customerPostal:
+                pickupPostal,
+
+            totalPieces:
+                Number(data.totalPieces) || 1,
+
+            totalWeight:
+                Number(data.totalWeight) || 1,
+
+            rawResponse:
+                result,
+        };
+
+    } catch (error) {
+
+        const message =
+            String(error.message || "")
+                .toLowerCase();
+
+        const isSocketError =
+            message.includes("socket hang up") ||
+            message.includes("econnreset") ||
+            message.includes("socket");
+
+        if (
+            isSocketError &&
+            attempt < 3
+        ) {
+            console.warn(
+                `[scheduleFrameDonationPickup] Socket error on attempt ${attempt}, retrying in 2s...`
+            );
+
+            await sleep(2000);
+
+            return exports.scheduleFrameDonationPickup(
+                data,
+                attempt + 1
+            );
+        }
+
+        throw error;
+    }
+};
+
+
+
+// ======================================================
+// TRACK BY BARCODE / PIN
+// ======================================================
+
+exports.trackByBarcode = async (barcode) => {
+    const client = await createClient(
+        trackingURL
+    );
+
+    const args = {
+        request: {
+            user_id:
+                process.env.LOOMIS_USERNAME,
+
+            password:
+                process.env.LOOMIS_PASSWORD,
+
+            barcode: String(barcode),
+
+            track_shipment: true,
+        },
+    };
+
+    const [result] =
+        await client.trackByBarcodeAsync(args);
+
+    const error =
+        result?.return?.error;
+
+    if (
+        error &&
+        String(error).toLowerCase() !== "null"
+    ) {
+        throw new Error(
+            `Loomis trackByBarcode error: ${error}`
+        );
+    }
+
+    const tracking =
+        result?.return?.result;
+
+    if (!tracking) {
+        return {
+            trackingNumber: String(barcode),
+            delivered: false,
+            events: [],
+        };
+    }
+
+    return {
+        trackingNumber:
+            tracking.pin ||
+            String(barcode),
+
+        shipmentNumber:
+            tracking.sin || null,
+
+        delivered:
+            tracking.delivered === true ||
+            tracking.delivered === "true",
+
+        trackingUrl:
+            tracking.tracking_url_en ||
+            null,
+
+        signedBy:
+            tracking.signed_by ||
+            null,
+
+        events:
+            (tracking.events || []).map(
+                event => ({
+                    code: event.code,
+                    description:
+                        event.code_description_en,
+                    city: event.city,
+                    province:
+                        event.province,
+                    dateTime:
+                        event.local_date_time,
+                    imageUrl:
+                        event.image_url ||
+                        null,
+                })
+            ),
     };
 };
