@@ -1,7 +1,7 @@
 const dayjs = require("dayjs");
 const customParseFormat = require("dayjs/plugin/customParseFormat");
-dayjs.extend(customParseFormat);
 
+dayjs.extend(customParseFormat);
 
 const esc = (s = "") =>
     String(s)
@@ -11,7 +11,11 @@ const esc = (s = "") =>
         .replace(/"/g, "&quot;");
 
 const fmtDate = (d) =>
-    d ? dayjs(String(d), "YYYYMMDD").format("dddd, MMM D, YYYY") : "-";
+    d
+        ? dayjs(String(d), "YYYYMMDD").format(
+            "dddd, MMM D, YYYY"
+        )
+        : "-";
 
 const fmtTime = (t) =>
     t && String(t).length === 4
@@ -21,9 +25,10 @@ const fmtTime = (t) =>
 const pickupScheduledEmail = ({
     name,
     pickupDate,
-    readyTime,
-    closeTime,
-    confirmationId,
+    eReturnId,
+    shipmentNumber,
+    trackingNumber,
+    reference,
     pickupUrl,
 }) => {
     return `
@@ -31,10 +36,14 @@ const pickupScheduledEmail = ({
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Pickup Scheduled</title>
+    <title>Frame Donation Pickup Arranged</title>
 </head>
 
-<body style="font-family: Arial, sans-serif; background:#f5f5f5; padding:30px;">
+<body style="
+    font-family: Arial, sans-serif;
+    background:#f5f5f5;
+    padding:30px;
+">
 
     <div style="
         max-width:600px;
@@ -49,7 +58,7 @@ const pickupScheduledEmail = ({
         </h2>
 
         <h3>
-            Your Frame Pickup Has Been Scheduled
+            Your Frame Donation Pickup Has Been Arranged
         </h3>
 
         <p>
@@ -57,25 +66,36 @@ const pickupScheduledEmail = ({
         </p>
 
         <p>
-            Your donated frames are scheduled for free
-            doorstep pickup through Loomis Express.
+            Your frame donation has been successfully arranged
+            through Loomis Express. The E-Return has been created
+            and your donation is ready for the next pickup step.
         </p>
 
         <hr>
 
         <p>
-            <strong>Pickup Date:</strong>
+            <strong>E-Return Date:</strong>
             ${esc(fmtDate(pickupDate))}
         </p>
 
         <p>
-            <strong>Pickup Time:</strong>
-            ${esc(fmtTime(readyTime))} - ${esc(fmtTime(closeTime))}
+            <strong>Loomis E-Return ID:</strong>
+            ${esc(eReturnId || "-")}
         </p>
 
         <p>
-            <strong>Loomis Confirmation ID:</strong>
-            ${esc(confirmationId || "-")}
+            <strong>Loomis Shipment Number:</strong>
+            ${esc(shipmentNumber || "-")}
+        </p>
+
+        <p>
+            <strong>Loomis Tracking / PIN:</strong>
+            ${esc(trackingNumber || "-")}
+        </p>
+
+        <p>
+            <strong>Reference:</strong>
+            ${esc(reference || "-")}
         </p>
 
         <br>
@@ -97,8 +117,8 @@ const pickupScheduledEmail = ({
         <br><br>
 
         <p>
-            You can use the button above to check whether
-            your frames have been picked up.
+            You can use the button above to view the current
+            status of your frame donation.
         </p>
 
         <p>

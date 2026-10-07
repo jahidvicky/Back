@@ -1257,7 +1257,7 @@ exports.scheduleFrameDonationPickup = async (data, attempt = 1) => {
 // TRACK BY BARCODE / PIN
 // ======================================================
 
-exports.trackByBarcode = async (barcode) => {
+exports.trackByBarcode = async (barcode, trackShipment = false) => {
     const client = await createClient(
         trackingURL
     );
@@ -1272,7 +1272,7 @@ exports.trackByBarcode = async (barcode) => {
 
             barcode: String(barcode),
 
-            track_shipment: true,
+            track_shipment: trackShipment,
         },
     };
 
@@ -1291,14 +1291,27 @@ exports.trackByBarcode = async (barcode) => {
         );
     }
 
-    const tracking =
+    // ==========================================
+    // LOOMIS MAY RETURN result AS ARRAY
+    // ==========================================
+
+    const rawTracking =
         result?.return?.result;
+
+    const tracking =
+        Array.isArray(rawTracking)
+            ? rawTracking[0]
+            : rawTracking;
 
     if (!tracking) {
         return {
             trackingNumber: String(barcode),
+            shipmentNumber: null,
             delivered: false,
+            trackingUrl: null,
+            signedBy: null,
             events: [],
+            rawResponse: result,
         };
     }
 
@@ -1325,18 +1338,366 @@ exports.trackByBarcode = async (barcode) => {
         events:
             (tracking.events || []).map(
                 event => ({
-                    code: event.code,
+                    code:
+                        event.code,
+
                     description:
                         event.code_description_en,
-                    city: event.city,
+
+                    city:
+                        event.address?.city ||
+                        event.city ||
+                        null,
+
                     province:
-                        event.province,
+                        event.address?.province ||
+                        event.province ||
+                        null,
+
                     dateTime:
                         event.local_date_time,
+
                     imageUrl:
                         event.image_url ||
                         null,
                 })
             ),
+
+        rawResponse: result,
+    };
+};
+
+
+
+
+
+
+
+
+// ======================================================
+// FRAME DONATION E-RETURN
+
+// We do NOT generate a customer-facing label here.
+// ======================================================
+
+exports.processFrameDonationEReturn = async (data) => {
+    const client = await createClient(trackingURL, process.env.LOOMIS_TRACKING_ENDPOINT);
+
+    // ---------------------------------------------
+    // Helper: next business day
+    // ---------------------------------------------
+    const getNextBusinessDay = () => {
+        let d = dayjs().add(1, "day");
+
+        while (d.day() === 0 || d.day() === 6) {
+            d = d.add(1, "day");
+        }
+
+        return d.format("YYYYMMDD");
+    };
+
+    const shippingDate = getNextBusinessDay();
+
+    // ---------------------------------------------
+    // Clean customer data
+    // ---------------------------------------------
+    const pickupPostal = String(
+        data.customerPostal || ""
+    )
+        .replace(/\s/g, "")
+        .toUpperCase();
+
+    const pickupProvince = String(
+        data.customerProvince || ""
+    )
+        .trim()
+        .toUpperCase();
+
+    const pickupPhone = String(
+        data.customerPhone || ""
+    )
+        .replace(/\D/g, "")
+        .slice(0, 11);
+
+    // ---------------------------------------------
+    // Validation
+    // ---------------------------------------------
+    if (!data.customerName) {
+        throw new Error(
+            "Customer name is required"
+        );
+    }
+
+    if (!data.customerAddress) {
+        throw new Error(
+            "Customer pickup address is required"
+        );
+    }
+
+    if (!data.customerCity) {
+        throw new Error(
+            "Customer pickup city is required"
+        );
+    }
+
+    if (!pickupProvince) {
+        throw new Error(
+            "Customer pickup province is required"
+        );
+    }
+
+    if (!pickupPostal) {
+        throw new Error(
+            "Customer pickup postal code is required"
+        );
+    }
+
+    if (!data.reference) {
+        throw new Error(
+            "Loomis E-Return reference is required"
+        );
+    }
+
+    // ---------------------------------------------
+    // processPickUpTag request
+    // ---------------------------------------------
+    const args = {
+        request: {
+            user_id: process.env.LOOMIS_USERNAME,
+            password: process.env.LOOMIS_PASSWORD,
+
+            pickup_tag: {
+                user_id: process.env.LOOMIS_USERNAME,
+                password: process.env.LOOMIS_PASSWORD,
+
+                courier: "L",
+                shipper_num: process.env.LOOMIS_ACCOUNT,
+
+                shipping_date: shippingDate,
+
+                service_type: data.serviceType || "DD",
+
+                reported_weight_unit: "L",
+                dimension_unit: "I",
+
+                // ==========================================
+                // CUSTOMER / PICKUP
+                // ==========================================
+
+                pickup_name:
+                    String(data.customerName || "").slice(0, 40),
+
+                pickup_address_line_1:
+                    String(data.customerAddress || "").slice(0, 40),
+
+                pickup_city:
+                    String(data.customerCity || "").slice(0, 40),
+
+                pickup_province:
+                    String(data.customerProvince || "").toUpperCase(),
+
+                pickup_postal_code:
+                    String(data.customerPostal || "")
+                        .replace(/\s/g, "")
+                        .toUpperCase(),
+
+                pickup_phone:
+                    cleanPhone(data.customerPhone),
+
+                pickup_email:
+                    data.customerEmail || "",
+
+                // ==========================================
+                // ATAL OPTICAL / DELIVERY
+                // ==========================================
+
+                delivery_name:
+                    WAREHOUSE.name?.slice(0, 40),
+
+                delivery_address_line_1:
+                    WAREHOUSE.address?.slice(0, 40),
+
+                delivery_city:
+                    WAREHOUSE.city?.slice(0, 40),
+
+                delivery_province:
+                    WAREHOUSE.province,
+
+                delivery_postal_code:
+                    WAREHOUSE.postalCode,
+
+                delivery_country:
+                    WAREHOUSE.country,
+
+                delivery_phone:
+                    cleanPhone(WAREHOUSE.phone),
+
+                // ==========================================
+                // PACKAGE
+                // ==========================================
+
+                packages: [
+                    {
+                        reported_weight:
+                            Math.max(
+                                Number(data.totalWeight) || 1,
+                                0.1
+                            ),
+                    },
+                ],
+
+                // ==========================================
+                // RETURN AUTHORIZATION / REFERENCE
+                // ==========================================
+
+                shipment_info_str: [
+                    {
+                        name: "REFERENCE",
+                        value:
+                            String(data.reference || "").slice(0, 30),
+                    },
+                ],
+            },
+        },
+    };
+
+
+    // ---------------------------------------------
+    // Call Loomis
+    // ---------------------------------------------
+    const [result] =
+        await client.processPickUpTagAsync(
+            args
+        );
+
+    // ---------------------------------------------
+    // Loomis error
+    // ---------------------------------------------
+    const loomisError =
+        result?.return?.error;
+
+    if (
+        loomisError &&
+        String(loomisError)
+            .toLowerCase() !== "null"
+    ) {
+        throw new Error(
+            `Loomis processPickUpTag error: ${loomisError}`
+        );
+    }
+
+    // ---------------------------------------------
+    // Find shipment in response
+    // ---------------------------------------------
+    const shipment =
+        result?.return
+            ?.processPickUpTagResult
+            ?.shipment ||
+        result?.return
+            ?.processShipmentResult
+            ?.shipment ||
+        result?.return
+            ?.shipment;
+
+    if (!shipment) {
+        throw new Error(
+            "Loomis did not return shipment information"
+        );
+    }
+
+    // ---------------------------------------------
+    // Shipment info
+    // ---------------------------------------------
+    const shipmentInfo =
+        Array.isArray(
+            shipment.shipment_info_str
+        )
+            ? shipment.shipment_info_str
+            : shipment.shipment_info_str
+                ? [
+                    shipment.shipment_info_str,
+                ]
+                : [];
+
+    // ---------------------------------------------
+    // SIN
+    // ---------------------------------------------
+    const sin =
+        shipmentInfo.find(
+            (item) =>
+                String(item?.name)
+                    .toUpperCase() === "SIN"
+        )?.value || null;
+
+    // ---------------------------------------------
+    // Package information
+    // ---------------------------------------------
+    const packages =
+        Array.isArray(
+            shipment.packages
+        )
+            ? shipment.packages
+            : shipment.packages
+                ? [shipment.packages]
+                : [];
+
+    const packageInfo =
+        Array.isArray(
+            packages[0]
+                ?.package_info_str
+        )
+            ? packages[0]
+                .package_info_str
+            : packages[0]
+                ?.package_info_str
+                ? [
+                    packages[0]
+                        .package_info_str,
+                ]
+                : [];
+
+    // ---------------------------------------------
+    // PIN
+    // ---------------------------------------------
+    const pin =
+        packageInfo.find(
+            (item) =>
+                String(item?.name)
+                    .toUpperCase() === "PIN"
+        )?.value || null;
+
+    // ---------------------------------------------
+    // E-Return ID
+    // ---------------------------------------------
+    const eReturnId =
+        shipment?.id
+            ? String(shipment.id)
+            : null;
+
+    if (!eReturnId) {
+        throw new Error(
+            "Loomis did not return an E-Return ID"
+        );
+    }
+
+    // ---------------------------------------------
+    // Return normalized data
+    // ---------------------------------------------
+    return {
+        eReturnId,
+
+        shipmentNumber:
+            sin,
+
+        trackingNumber:
+            pin,
+
+        reference:
+            data.reference,
+
+        shippingDate,
+
+        rawResponse:
+            result,
     };
 };

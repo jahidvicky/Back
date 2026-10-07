@@ -260,7 +260,7 @@ exports.getMyDonations = async (req, res) => {
     // for anyone — the donor only learns details through email.
     const donations = await FrameDonation.find({ donorUserId: userId })
       .select(
-        "frameType frameQuantity quantity frameImages pickupStatus pickupDate pickupReadyTime pickupCloseTime pickedUpOn createdAt"
+        "frameType frameQuantity quantity frameImages pickupStatus pickupDate pickupReadyTime pickupCloseTime pickedUpOn pickupAccessToken createdAt"
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -304,6 +304,18 @@ exports.arrangePickup = async (req, res) => {
       });
     }
 
+    if (donation.loomisEReturnId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "A Loomis E-Return has already been created for this donation",
+        eReturnId:
+          donation.loomisEReturnId,
+        trackingNumber:
+          donation.loomisTrackingNumber || null,
+      });
+    }
+
     if (donation.pickupStatus === "PICKED_UP") {
       return res.status(400).json({
         success: false,
@@ -311,6 +323,14 @@ exports.arrangePickup = async (req, res) => {
       });
     }
 
+    if (donation.loomisEReturnId) {
+      return res.status(400).json({
+        success: false,
+        message: "A Loomis E-Return has already been created for this donation",
+        eReturnId: donation.loomisEReturnId,
+        trackingNumber: donation.loomisTrackingNumber || null,
+      });
+    }
 
     // ==========================================
     // DONOR ADDRESS FIELDS (needed for both the date lookup and the pickup call)
@@ -323,38 +343,7 @@ exports.arrangePickup = async (req, res) => {
     const city =
       donation.city || parseCityFromAddress(donation.address);
 
-    // ==========================================
-    // PICKUP DATE / TIME
-    // ==========================================
 
-    const readyTime =
-      req.body?.readyTime || "1000";
-
-    const closeTime =
-      req.body?.closeTime || "1700";
-
-    let pickupDate = req.body?.pickupDate;
-
-    if (!pickupDate) {
-      // getPickupDay is postal-code specific (per Loomis docs) — must use the
-      // donor's postal code, not the warehouse's, since donation pickups
-      // happen at the donor's address
-      const validDays = await loomisService.getPickupDay({
-        fromDate: dayjs().format("YYYYMMDD"),
-        numOfDays: 7,
-        postalCode: postal,
-      });
-
-      if (!validDays.length) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Loomis has no available pickup days in the next 7 days. Please try again later or contact Loomis.",
-        });
-      }
-
-      pickupDate = validDays[0].value;
-    }
 
     // ==========================================
     // SCHEDULE LOOMIS PICKUP
@@ -389,17 +378,25 @@ exports.arrangePickup = async (req, res) => {
       });
     }
 
+    const reference = `ATAL-${donation._id}`;
+
     const result =
-      await loomisService.scheduleFrameDonationPickup({
-        customerName: donation.name,
+      await loomisService.processFrameDonationEReturn({
+        customerName:
+          donation.name,
 
-        customerAddress: donation.street || parseStreetFromAddress(donation.address),
+        customerAddress:
+          donation.street ||
+          parseStreetFromAddress(donation.address),
 
-        customerCity: city,
+        customerCity:
+          city,
 
-        customerProvince: provinceCode,
+        customerProvince:
+          provinceCode,
 
-        customerPostal: postal,
+        customerPostal:
+          postal,
 
         customerPhone:
           donation.phone,
@@ -416,12 +413,7 @@ exports.arrangePickup = async (req, res) => {
             1
           ),
 
-        pickupDate,
-        readyTime,
-        closeTime,
-
-        comments:
-          `Frame donation pickup for donation ${donation._id}`,
+        reference,
       });
 
     // ==========================================
@@ -434,27 +426,34 @@ exports.arrangePickup = async (req, res) => {
         {
           pickupStatus: "ARRANGED",
 
-          loomisConfirmationId:
-            result.confirmationNumber || null,
+          // ==========================================
+          // LOOMIS E-RETURN DATA
+          // ==========================================
+
+          loomisEReturnId:
+            result.eReturnId || null,
+
+          loomisShipmentNumber:
+            result.shipmentNumber || null,
+
+          loomisTrackingNumber:
+            result.trackingNumber || null,
+
+          loomisReference:
+            result.reference || reference,
+
+          // ==========================================
+          // PICKUP INFORMATION
+          // ==========================================
 
           pickupDate:
-            result.pickupDate ||
-            pickupDate ||
-            null,
+            result.shippingDate || null,
 
-          pickupReadyTime:
-            result.readyTime ||
-            readyTime ||
-            null,
+          pickupReadyTime: null,
 
-          pickupCloseTime:
-            result.closeTime ||
-            closeTime ||
-            null,
+          pickupCloseTime: null,
 
-          pickupTrackingUrl:
-            result.trackingUrl ||
-            null,
+          pickupTrackingUrl: null,
 
           pickupError: null,
 
@@ -463,6 +462,10 @@ exports.arrangePickup = async (req, res) => {
           pickedUpOn: null,
 
           pickupEvents: [],
+
+          // New E-Return flow does not use
+          // the old scheduled-pickup confirmation ID.
+          loomisConfirmationId: null,
         },
         {
           new: true,
@@ -491,7 +494,7 @@ exports.arrangePickup = async (req, res) => {
         to: updatedDonation.email,
 
         subject:
-          "Your ATAL Optical Frame Pickup Has Been Scheduled",
+          "Your ATAL Optical Frame Donation Pickup Has Been Arranged",
 
         html: pickupScheduledEmail({
           name: updatedDonation.name,
@@ -499,14 +502,17 @@ exports.arrangePickup = async (req, res) => {
           pickupDate:
             updatedDonation.pickupDate,
 
-          readyTime:
-            updatedDonation.pickupReadyTime,
+          eReturnId:
+            updatedDonation.loomisEReturnId,
 
-          closeTime:
-            updatedDonation.pickupCloseTime,
+          shipmentNumber:
+            updatedDonation.loomisShipmentNumber,
 
-          confirmationId:
-            updatedDonation.loomisConfirmationId,
+          trackingNumber:
+            updatedDonation.loomisTrackingNumber,
+
+          reference:
+            updatedDonation.loomisReference,
 
           pickupUrl,
         }),
@@ -568,83 +574,154 @@ exports.arrangePickup = async (req, res) => {
 exports.checkPickupStatus = async (req, res) => {
   try {
     const donation =
-      await FrameDonation.findById(
-        req.params.id
-      );
+      await FrameDonation.findById(req.params.id);
 
     if (!donation) {
       return res.status(404).json({
         success: false,
-        message:
-          "Donation not found",
+        message: "Donation not found",
       });
     }
 
-    if (
-      !donation.loomisConfirmationId
-    ) {
+    // ==========================================
+    // E-RETURN TRACKING DATA
+    // ==========================================
+
+    if (!donation.loomisTrackingNumber) {
       return res.status(400).json({
         success: false,
         message:
-          "No Loomis pickup confirmation ID found",
+          "No Loomis E-Return tracking number found",
       });
     }
 
-    const pickup =
-      await loomisService.searchPickupById(
-        donation.loomisConfirmationId
+    // ==========================================
+    // TRACK LOOMIS E-RETURN
+    // ==========================================
+
+    const tracking =
+      await loomisService.trackByBarcode(
+        donation.loomisTrackingNumber
+      );
+
+    // ==========================================
+    // DETERMINE PICKUP STATUS FROM LOOMIS EVENTS
+    // ==========================================
+
+    const trackingEvents =
+      Array.isArray(tracking?.events)
+        ? tracking.events
+        : [];
+
+    const pickedUpEvent =
+      trackingEvents.find(
+        (event) =>
+          String(event?.code || "").toUpperCase() === "PIC"
+      );
+
+    const deliveredEvent =
+      trackingEvents.find(
+        (event) =>
+          String(event?.code || "").toUpperCase() === "DEL"
       );
 
     const pickedUp =
-      Boolean(pickup.pickedUpOn);
+      Boolean(pickedUpEvent);
+
+    const delivered =
+      Boolean(deliveredEvent) ||
+      tracking?.delivered === true;
+
+    const shipmentStatus =
+      delivered
+        ? "DELIVERED"
+        : pickedUp
+          ? "PICKED_UP"
+          : null;
+
+    // ==========================================
+    // SAVE TRACKING EVENT
+    // ==========================================
 
     const update = {
-      pickupLastCheckedAt:
-        new Date(),
+      pickupLastCheckedAt: new Date(),
 
       pickupEvents: [
+        ...(donation.pickupEvents || []),
+
         {
-          confirmationId:
-            pickup.confirmationId,
+          trackingNumber:
+            donation.loomisTrackingNumber,
 
-          pickupDate:
-            pickup.pickupDate,
+          shipmentNumber:
+            donation.loomisShipmentNumber,
 
-          readyTime:
-            pickup.readyTime,
+          eReturnId:
+            donation.loomisEReturnId,
 
-          closingTime:
-            pickup.closingTime,
+          status:
+            shipmentStatus || null,
 
-          numberOfParcels:
-            pickup.numberOfParcels,
+          tracking,
 
-          weight:
-            pickup.weight,
-
-          cancelledBy:
-            pickup.cancelledBy,
-
-          cancelledOn:
-            pickup.cancelledOn,
-
-          pickedUpOn:
-            pickup.pickedUpOn,
-
-          checkedAt:
-            new Date(),
+          checkedAt: new Date(),
         },
       ],
     };
 
-    if (pickedUp) {
-      update.pickupStatus =
-        "PICKED_UP";
+    if (delivered) {
+      update.pickupStatus = "DELIVERED";
+    } else if (pickedUp) {
+      update.pickupStatus = "PICKED_UP";
 
-      update.pickedUpOn =
-        new Date(
-          pickup.pickedUpOn
-        );
+      // Use the actual Loomis PIC event time
+      if (pickedUpEvent?.dateTime) {
+        const rawPickupDateTime =
+          String(pickedUpEvent.dateTime).trim();
+
+        const match =
+          rawPickupDateTime.match(
+            /^(\d{8})\s+(\d{6})$/
+          );
+
+        if (match) {
+          const datePart = match[1];
+          const timePart = match[2];
+
+          const year =
+            Number(datePart.slice(0, 4));
+
+          const month =
+            Number(datePart.slice(4, 6)) - 1;
+
+          const day =
+            Number(datePart.slice(6, 8));
+
+          const hour =
+            Number(timePart.slice(0, 2));
+
+          const minute =
+            Number(timePart.slice(2, 4));
+
+          const second =
+            Number(timePart.slice(4, 6));
+
+          update.pickedUpOn = new Date(
+            Date.UTC(
+              year,
+              month,
+              day,
+              hour,
+              minute,
+              second
+            )
+          );
+        } else {
+          update.pickedUpOn = new Date();
+        }
+      } else {
+        update.pickedUpOn = new Date();
+      }
     }
 
     const updatedDonation =
@@ -667,23 +744,32 @@ exports.checkPickupStatus = async (req, res) => {
       pickedUpOn:
         updatedDonation.pickedUpOn,
 
-      confirmationId:
-        updatedDonation.loomisConfirmationId,
+      eReturnId:
+        updatedDonation.loomisEReturnId,
 
-      pickup,
+      shipmentNumber:
+        updatedDonation.loomisShipmentNumber,
+
+      trackingNumber:
+        updatedDonation.loomisTrackingNumber,
+
+      reference:
+        updatedDonation.loomisReference,
+
+      tracking,
     });
 
   } catch (error) {
-
     console.error(
-      "Check Loomis Pickup Status Error:",
+      "Check Loomis E-Return Status Error:",
       error
     );
 
     return res.status(500).json({
       success: false,
       message:
-        error.message,
+        error.message ||
+        "Unable to check Loomis E-Return status",
     });
   }
 };
@@ -708,7 +794,7 @@ exports.getCustomerPickupStatus = async (req, res) => {
     const donation = await FrameDonation.findOne({
       pickupAccessToken: token,
     }).select(
-      "name address postal city province frameType frameQuantity pickupStatus pickupDate pickupReadyTime pickupCloseTime pickedUpOn createdAt"
+      "name address postal city province frameType frameQuantity pickupStatus pickupDate pickupReadyTime pickupCloseTime pickedUpOn pickupEvents createdAt"
     );
 
     if (!donation) {
@@ -717,6 +803,35 @@ exports.getCustomerPickupStatus = async (req, res) => {
         message: "Pickup information not found",
       });
     }
+
+
+    const pickupEvent =
+      Array.isArray(donation.pickupEvents)
+        ? donation.pickupEvents
+          .flatMap((item) =>
+            Array.isArray(item?.tracking?.events)
+              ? item.tracking.events
+              : []
+          )
+          .find(
+            (event) =>
+              String(event?.code || "").toUpperCase() === "PIC"
+          )
+        : null;
+
+    const deliveredEvent =
+      Array.isArray(donation.pickupEvents)
+        ? donation.pickupEvents
+          .flatMap((item) =>
+            Array.isArray(item?.tracking?.events)
+              ? item.tracking.events
+              : []
+          )
+          .find(
+            (event) =>
+              String(event?.code || "").toUpperCase() === "DEL"
+          )
+        : null;
 
     return res.status(200).json({
       success: true,
@@ -741,7 +856,14 @@ exports.getCustomerPickupStatus = async (req, res) => {
         readyTime: donation.pickupReadyTime,
         closeTime: donation.pickupCloseTime,
 
-        pickedUpOn: donation.pickedUpOn,
+        pickedUpOn:
+          pickupEvent?.dateTime ||
+          donation.pickedUpOn ||
+          null,
+
+        deliveredOn:
+          deliveredEvent?.dateTime ||
+          null,
       },
     });
 

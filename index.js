@@ -157,7 +157,7 @@ app.use("/api/shipping", loomisRoutes);
 app.use("/api", freeEyeCheckup);
 app.use("/api/location", locationRoutes);
 app.use("/api", policyRoutes);
-  
+
 // -------------------- DATABASE CONNECTION --------------------
 const PORT = process.env.PORT || 4000;
 

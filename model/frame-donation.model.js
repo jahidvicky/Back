@@ -1,31 +1,3 @@
-// const mongoose = require("mongoose");
-
-// const frameDonationSchema = new mongoose.Schema(
-//     {
-//         name: { type: String, required: true },
-//         email: { type: String, required: true },
-//         phone: { type: String, required: true },
-//         address: { type: String, required: true },
-//         frameType: { type: String, required: true },
-//         frameQuantity: { type: Number, required: true },
-//         frameImages: {
-//             type: [String],
-//         },
-//     },
-//     { timestamps: true }
-// );
-
-// module.exports = mongoose.model("FrameDonation", frameDonationSchema);
-
-
-
-
-
-
-
-
-
-
 const mongoose = require("mongoose");
 
 const frameDonationSchema = new mongoose.Schema(
@@ -124,6 +96,7 @@ const frameDonationSchema = new mongoose.Schema(
                 "PENDING",
                 "ARRANGED",
                 "PICKED_UP",
+                "DELIVERED",
                 "CANCELLED",
                 "FAILED",
             ],
@@ -146,6 +119,31 @@ const frameDonationSchema = new mongoose.Schema(
         },
 
         // Loomis scheduled-pickup confirmation ID
+        // =====================================
+        // LOOMIS E-RETURN INFORMATION
+        // =====================================
+
+        // E-Return ID returned by processPickUpTag
+        loomisEReturnId: {
+            type: String,
+            default: null,
+        },
+
+        // Shipment Identification Number (SIN)
+        loomisShipmentNumber: {
+            type: String,
+            default: null,
+        },
+
+        // Package Identification Number (PIN)
+        // This is the Loomis tracking number.
+        loomisTrackingNumber: {
+            type: String,
+            default: null,
+        },
+
+        // Keep this only for old donations
+        // created using schedulePickup.
         loomisConfirmationId: {
             type: String,
             default: null,
