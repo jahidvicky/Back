@@ -19,6 +19,7 @@ router.get("/label/:id", loomisController.getLabel);
 router.post("/pickup/:orderId", loomisController.schedulePickup);
 router.delete("/cancel-pickup/:orderId", loomisController.cancelPickup);
 router.get("/pickup-days", loomisController.getPickupDay);
+router.get("/e-return-search", loomisController.searchEReturnByShippingDate);
 router.get("/pickup-search/:confirmationId", loomisController.searchPickupById);
 router.get("/pickup-history", loomisController.searchPickupByDate);
 router.post("/delivery-estimate", loomisController.getDeliveryEstimate);

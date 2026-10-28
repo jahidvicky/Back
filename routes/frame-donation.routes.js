@@ -33,4 +33,9 @@ router.get(
     controller.getMyDonations
 );
 
+router.get(
+    "/postal-code/:postalCode",
+    controller.lookupPostalCode
+);
+
 module.exports = router;

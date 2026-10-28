@@ -6,6 +6,7 @@ const sendEmail = require("../utils/sendEmail");
 const sendFrameDonationMail = require("../utils/frameDonationMailer");
 const thankYouDonation = require("../utils/thankYouDonation");
 const pickupScheduledEmail = require("../utils/pickupScheduledEmail");
+const { lookup } = require("canada-postal-codes");
 
 const loomisService = require("../services/loomisService");
 const getProvinceFromPostalCode = require("../utils/getProvinceFromPostalCode");
@@ -260,7 +261,7 @@ exports.getMyDonations = async (req, res) => {
     // for anyone — the donor only learns details through email.
     const donations = await FrameDonation.find({ donorUserId: userId })
       .select(
-        "frameType frameQuantity quantity frameImages pickupStatus pickupDate pickupReadyTime pickupCloseTime pickedUpOn pickupAccessToken createdAt"
+        "frameType frameQuantity quantity frameImages pickupStatus pickupDate pickupReadyTime pickupCloseTime pickedUpOn createdAt"
       )
       .sort({ createdAt: -1 })
       .lean();
@@ -294,6 +295,7 @@ exports.getMyDonations = async (req, res) => {
 // ======================================================
 
 exports.arrangePickup = async (req, res) => {
+  let bookingSaved = false;
   try {
     const donation = await FrameDonation.findById(req.params.id);
 
@@ -304,18 +306,6 @@ exports.arrangePickup = async (req, res) => {
       });
     }
 
-    if (donation.loomisEReturnId) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "A Loomis E-Return has already been created for this donation",
-        eReturnId:
-          donation.loomisEReturnId,
-        trackingNumber:
-          donation.loomisTrackingNumber || null,
-      });
-    }
-
     if (donation.pickupStatus === "PICKED_UP") {
       return res.status(400).json({
         success: false,
@@ -323,14 +313,7 @@ exports.arrangePickup = async (req, res) => {
       });
     }
 
-    if (donation.loomisEReturnId) {
-      return res.status(400).json({
-        success: false,
-        message: "A Loomis E-Return has already been created for this donation",
-        eReturnId: donation.loomisEReturnId,
-        trackingNumber: donation.loomisTrackingNumber || null,
-      });
-    }
+    // Continue with postal code, city, and province validation.
 
     // ==========================================
     // DONOR ADDRESS FIELDS (needed for both the date lookup and the pickup call)
@@ -378,6 +361,38 @@ exports.arrangePickup = async (req, res) => {
       });
     }
 
+    // ==========================================
+    // ATOMICALLY CLAIM THE PICKUP BOOKING
+    // ==========================================
+
+
+    const claimedDonation = await FrameDonation.findOneAndUpdate(
+      {
+        _id: donation._id,
+        loomisEReturnId: null,
+        pickupStatus: "PENDING",
+      },
+      {
+        $set: {
+          pickupStatus: "BOOKING",
+          pickupError: null,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      }
+    );
+
+
+    if (!claimedDonation) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "A pickup booking is already in progress or this donation is no longer eligible.",
+      });
+    }
+
     const reference = `ATAL-${donation._id}`;
 
     const result =
@@ -417,60 +432,60 @@ exports.arrangePickup = async (req, res) => {
       });
 
     // ==========================================
+    // VALIDATE LOOMIS BOOKING RESPONSE
+    // ==========================================
+
+    if (!result?.eReturnId || !result?.trackingNumber) {
+      throw new Error(
+        "Loomis booking response is missing the E-Return ID or tracking PIN. Verify the shipment with Loomis before retrying."
+      );
+    }
+
+    // ==========================================
     // SAVE LOOMIS PICKUP DATA
     // ==========================================
+
+    const update = {
+      pickupStatus: "ARRANGED",
+
+      // LOOMIS E-RETURN DATA
+      loomisEReturnId: result.eReturnId,
+      loomisShipmentNumber: result.shipmentNumber || null,
+      loomisTrackingNumber: result.trackingNumber,
+      loomisReference: result.reference || reference,
+
+      // PICKUP INFORMATION
+      pickupDate: result.shippingDate || null,
+      pickupReadyTime: null,
+      pickupCloseTime: null,
+      pickupTrackingUrl: null,
+      pickupError: null,
+      pickupLastCheckedAt: null,
+      pickedUpOn: null,
+      pickupEvents: [],
+      loomisConfirmationId: null,
+    };
 
     const updatedDonation =
       await FrameDonation.findByIdAndUpdate(
         donation._id,
         {
-          pickupStatus: "ARRANGED",
-
-          // ==========================================
-          // LOOMIS E-RETURN DATA
-          // ==========================================
-
-          loomisEReturnId:
-            result.eReturnId || null,
-
-          loomisShipmentNumber:
-            result.shipmentNumber || null,
-
-          loomisTrackingNumber:
-            result.trackingNumber || null,
-
-          loomisReference:
-            result.reference || reference,
-
-          // ==========================================
-          // PICKUP INFORMATION
-          // ==========================================
-
-          pickupDate:
-            result.shippingDate || null,
-
-          pickupReadyTime: null,
-
-          pickupCloseTime: null,
-
-          pickupTrackingUrl: null,
-
-          pickupError: null,
-
-          pickupLastCheckedAt: null,
-
-          pickedUpOn: null,
-
-          pickupEvents: [],
-
-          // New E-Return flow does not use
-          // the old scheduled-pickup confirmation ID.
-          loomisConfirmationId: null,
+          $set: update,
         },
         {
           new: true,
+          runValidators: true,
         }
       );
+
+    if (!updatedDonation) {
+      throw new Error(
+        "Loomis booking may have succeeded, but the donation record could not be updated. Verify the shipment with Loomis before retrying."
+      );
+    }
+
+    bookingSaved = true;
+
 
 
     // ============================================
@@ -538,29 +553,51 @@ exports.arrangePickup = async (req, res) => {
       donation: updatedDonation,
     });
 
+
   } catch (error) {
+    console.error("Arrange Loomis Pickup Error:", error);
 
-    console.error(
-      "Arrange Loomis Pickup Error:",
-      error
-    );
+    try {
+      const errorUpdate = {
+        pickupError: error.message,
+      };
 
-    await FrameDonation.findByIdAndUpdate(
-      req.params.id,
-      {
-        pickupStatus: "FAILED",
-
-        pickupError:
-          error.message,
+      // If the booking was already saved, preserve ARRANGED status
+      // and all saved Loomis shipment information.
+      if (bookingSaved) {
+        await FrameDonation.findByIdAndUpdate(
+          req.params.id,
+          {
+            $set: errorUpdate,
+          }
+        );
+      } else {
+        // Keep BOOKING status when the Loomis outcome is uncertain.
+        // Do not reset to FAILED or PENDING automatically.
+        await FrameDonation.findOneAndUpdate(
+          {
+            _id: req.params.id,
+            pickupStatus: "BOOKING",
+            loomisEReturnId: null,
+          },
+          {
+            $set: errorUpdate,
+          }
+        );
       }
-    );
+    } catch (saveError) {
+      console.error(
+        "Failed to save Loomis booking error:",
+        saveError
+      );
+    }
 
     return res.status(500).json({
       success: false,
-
-      message:
-        error.message ||
-        "Failed to arrange pickup",
+      message: bookingSaved
+        ? "The Loomis booking was saved, but a later operation failed."
+        : "Pickup booking could not be confirmed. Verify the shipment with Loomis before retrying.",
+      error: error.message,
     });
   }
 };
@@ -876,6 +913,42 @@ exports.getCustomerPickupStatus = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Unable to get pickup status",
+    });
+  }
+};
+
+
+exports.lookupPostalCode = (req, res) => {
+  try {
+    const postalCode = req.params.postalCode;
+
+    const normalizedPostalCode = postalCode
+      .replace(/\s+/g, "")
+      .replace(/-/g, "")
+      .toUpperCase();
+
+    const result = lookup(normalizedPostalCode);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Postal code not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      postalCode: result.postalCode,
+      city: result.city,
+      province: result.province,
+      country: "Canada",
+    });
+  } catch (error) {
+    console.error("Postal code lookup error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Unable to look up postal code",
     });
   }
 };

@@ -17,7 +17,10 @@ const WAREHOUSE = {
 };
 
 exports.getRates = async (data) => {
-    const client = await createClient(ratingURL);
+    const client = await createClient(
+        ratingURL,
+        process.env.LOOMIS_RATING_ENDPOINT
+    );
 
     const cleanDestination = (data.destination || "").replace(/\s/g, "");
     const derivedProvince = getProvinceFromPostalCode(cleanDestination) || "ON"; // always from postal
@@ -225,33 +228,13 @@ exports.createShipment = async (data) => {
 };
 
 exports.trackShipment = async (trackingNumber) => {
-    const client = await createClient(trackingURL);
-    const args = {
-        request: {
-            user_id: process.env.LOOMIS_USERNAME,
-            password: process.env.LOOMIS_PASSWORD,
-            barcode: trackingNumber,
-            track_shipment: false,
-        },
-    };
-    const [result] = await client.trackByBarcodeAsync(args);
-    const shipment = result?.return?.result;
-    if (!shipment) {
-        return { success: false, message: "Tracking not found" };
+    const barcode = String(trackingNumber || "").trim();
+
+    if (!barcode) {
+        throw new Error("Tracking number is required");
     }
-    return {
-        trackingNumber: shipment.pin,
-        delivered: shipment.delivered,
-        trackingUrl: shipment.tracking_url_en,
-        signedBy: shipment.signed_by || null,
-        events: (shipment.events || []).map((e) => ({
-            code: e.code,
-            description: e.code_description_en,
-            city: e.city,
-            province: e.province,
-            dateTime: e.local_date_time,
-        })),
-    };
+
+    return await exports.trackByBarcode(barcode, true);
 };
 
 exports.getLabel = async (labelId, format = "PNG") => {
@@ -322,7 +305,10 @@ exports.schedulePickup = async (data, attempt = 1) => {
     const fmt = (t) => (t || "").replace(":", "");
 
     try {
-        const client = await createClient(trackingURL);
+        const client = await createClient(
+            trackingURL,
+            process.env.LOOMIS_TRACKING_ENDPOINT
+        );
 
         const args = {
             request: {
@@ -478,7 +464,10 @@ const cleanPostal = (pc) =>
     (pc || "").toUpperCase().replace(/\s/g, "");
 
 exports.createReturnShipment = async (data) => {
-    const client = await createClient(trackingURL);
+    const client = await createClient(
+        trackingURL,
+        process.env.LOOMIS_TRACKING_ENDPOINT
+    );
 
     const getNextBusinessDay = () => {
         let d = dayjs().add(1, "day");
@@ -552,8 +541,6 @@ exports.createReturnShipment = async (data) => {
             }
         },
     };
-
-    const [result] = await client.processPickUpTagAsync(args);
 
 
     //  HANDLE ERROR PROPERLY
@@ -763,7 +750,10 @@ exports.getAvailableServices = async (data) => {
 // CANCEL PICKUP
 // ================================
 exports.cancelPickup = async (confirmationNumber) => {
-    const client = await createClient(trackingURL);
+    const client = await createClient(
+        trackingURL,
+        process.env.LOOMIS_TRACKING_ENDPOINT
+    );
 
     const args = {
         request: {
@@ -788,7 +778,10 @@ exports.cancelPickup = async (confirmationNumber) => {
 // GET PICKUP DAY
 // ================================
 exports.getPickupDay = async ({ fromDate, numOfDays = 7, postalCode }) => {
-    const client = await createClient(trackingURL);
+    const client = await createClient(
+        trackingURL,
+        process.env.LOOMIS_TRACKING_ENDPOINT
+    );
 
     const args = {
         request: {
@@ -884,8 +877,13 @@ exports.searchPickupById = async (confirmationId) => {
         );
     }
 
-    const pickup =
-        result?.return?.pickup;
+    const rawPickup = result?.return?.pickup;
+
+    const pickup = Array.isArray(rawPickup)
+        ? rawPickup.find(
+            (item) => String(item?.id) === String(confirmationId)
+        )
+        : rawPickup;
 
     if (!pickup) {
         throw new Error(
@@ -936,7 +934,10 @@ exports.searchPickupById = async (confirmationId) => {
 // SEARCH PICKUPS BY DATE RANGE
 // ================================
 exports.searchPickupByPickupDate = async ({ fromDate, toDate }) => {
-    const client = await createClient(trackingURL);
+    const client = await createClient(
+        trackingURL,
+        process.env.LOOMIS_TRACKING_ENDPOINT
+    );
 
     const args = {
         request: {
@@ -977,7 +978,10 @@ exports.searchPickupByPickupDate = async ({ fromDate, toDate }) => {
 // TRACK BY REFERENCE
 // ================================
 exports.trackByReference = async ({ reference, days, postalCode, shipperNum }) => {
-    const client = await createClient(trackingURL);
+    const client = await createClient(
+        trackingURL,
+        process.env.LOOMIS_TRACKING_ENDPOINT
+    );
 
     const args = {
         request: {
@@ -1050,7 +1054,10 @@ exports.scheduleFrameDonationPickup = async (data, attempt = 1) => {
     }
 
     try {
-        const client = await createClient(trackingURL);
+        const client = await createClient(
+            trackingURL,
+            process.env.LOOMIS_TRACKING_ENDPOINT
+        );
 
         const pickupPostal = String(data.customerPostal || "")
             .replace(/\s/g, "")
@@ -1569,7 +1576,6 @@ exports.processFrameDonationEReturn = async (data) => {
         await client.processPickUpTagAsync(
             args
         );
-
     // ---------------------------------------------
     // Loomis error
     // ---------------------------------------------
@@ -1578,12 +1584,16 @@ exports.processFrameDonationEReturn = async (data) => {
 
     if (
         loomisError &&
-        String(loomisError)
-            .toLowerCase() !== "null"
+        String(loomisError).toLowerCase() !== "null"
     ) {
-        throw new Error(
+        const error = new Error(
             `Loomis processPickUpTag error: ${loomisError}`
         );
+
+        // Loomis returned an explicit API error.
+        error.code = "LOOMIS_API_REJECTION";
+
+        throw error;
     }
 
     // ---------------------------------------------
@@ -1666,6 +1676,13 @@ exports.processFrameDonationEReturn = async (data) => {
                     .toUpperCase() === "PIN"
         )?.value || null;
 
+    // PIN is required for shipment tracking.
+    if (!pin) {
+        throw new Error(
+            "Loomis did not return a PIN (tracking number)"
+        );
+    }
+
     // ---------------------------------------------
     // E-Return ID
     // ---------------------------------------------
@@ -1686,18 +1703,104 @@ exports.processFrameDonationEReturn = async (data) => {
     return {
         eReturnId,
 
-        shipmentNumber:
-            sin,
+        shipmentNumber: sin,
 
-        trackingNumber:
-            pin,
+        trackingNumber: pin,
 
-        reference:
-            data.reference,
+        reference: String(data.reference || "").slice(0, 30),
 
         shippingDate,
 
-        rawResponse:
-            result,
+        rawResponse: result,
     };
 };
+
+
+
+
+exports.searchEReturnByShippingDate = async (fromDate, toDate) => {
+    const isValidDate = (date) => /^\d{8}$/.test(String(date || ""));
+
+    if (!isValidDate(fromDate) || !isValidDate(toDate)) {
+        throw new Error("fromDate and toDate must use YYYYMMDD format");
+    }
+
+    if (fromDate > toDate) {
+        throw new Error("fromDate cannot be later than toDate");
+    }
+
+    const client = await createClient(
+        trackingURL,
+        process.env.LOOMIS_TRACKING_ENDPOINT
+    );
+
+
+    const description = client.describe();
+
+    const service =
+        description.USSAddonsService;
+
+    const port =
+        service?.USSAddonsServiceHttpsSoap11Endpoint;
+
+    const method =
+        port?.searchPickUpTagByShippingDate;
+
+    if (!method) {
+        throw new Error(
+            "searchPickUpTagByShippingDate not found in HTTPS SOAP 1.1 WSDL"
+        );
+    }
+
+
+    const args = {
+        request: {
+            user_id: process.env.LOOMIS_USERNAME,
+            password: process.env.LOOMIS_PASSWORD,
+            shipper_num: process.env.LOOMIS_ACCOUNT,
+            from_date: String(fromDate),
+            to_date: String(toDate),
+            page_num: 0,
+        },
+    };
+
+    const [result] =
+        await client.searchPickUpTagByShippingDateAsync(args);
+
+    const response = result?.return;
+    const error = response?.error;
+
+    if (error && String(error).toLowerCase() !== "null") {
+        throw new Error(`Loomis E-Return search error: ${error}`);
+    }
+
+    const raw = response?.pickup_tag || [];
+    const records = Array.isArray(raw) ? raw : [raw];
+
+    const eReturns = records.filter(Boolean).map((item) => {
+        const info = item.shipment_info_str || [];
+        const entries = Array.isArray(info) ? info : [info];
+
+        return {
+            eReturnId: item.id || null,
+            shippingDate: item.shipping_date || null,
+            reference:
+                entries.find((x) => x?.name === "REFERENCE")?.value || null,
+            shipmentNumber:
+                entries.find((x) => x?.name === "SIN")?.value || null,
+            voided: item.voided ?? null,
+            deliveryAddress: item.delivery_address_line_1 || null,
+            deliveryCity: item.delivery_city || null,
+            deliveryPostalCode: item.delivery_postal_code || null,
+        };
+    });
+
+    return {
+        fromDate,
+        toDate,
+        eReturns,
+        rawResponse: result,
+    };
+};
+
+

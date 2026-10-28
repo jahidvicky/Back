@@ -128,7 +128,7 @@ const deleteCouponCode = async (req, res) => {
 const validateCouponCode = async (req, res) => {
   try {
     const { code } = req.params;
-    const { cartTotal, category } = req.query; 
+    const { cartTotal, category } = req.query;
     const total = Number(cartTotal);
 
     // Find active coupon

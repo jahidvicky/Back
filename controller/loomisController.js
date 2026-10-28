@@ -1051,6 +1051,49 @@ exports.searchPickupById = async (req, res) => {
 };
 
 
+
+
+exports.searchEReturnByShippingDate = async (req, res) => {
+    try {
+        const { fromDate, toDate } = req.query;
+
+        if (
+            !fromDate ||
+            !toDate ||
+            !/^\d{8}$/.test(fromDate) ||
+            !/^\d{8}$/.test(toDate)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    "fromDate and toDate are required in YYYYMMDD format",
+            });
+        }
+
+        const result =
+            await loomisService.searchEReturnByShippingDate(
+                fromDate,
+                toDate
+            );
+
+        return res.status(200).json({
+            success: true,
+            ...result,
+        });
+    } catch (error) {
+        console.error("SEARCH E-RETURN ERROR:", error.message);
+
+        return res.status(500).json({
+            success: false,
+            message: "Failed to search Loomis E-Returns",
+            error: error.message,
+        });
+    }
+};
+
+
+
+
 // ================================
 // SEARCH PICKUPS BY DATE RANGE
 // ================================

@@ -94,6 +94,7 @@ const frameDonationSchema = new mongoose.Schema(
             type: String,
             enum: [
                 "PENDING",
+                "BOOKING",
                 "ARRANGED",
                 "PICKED_UP",
                 "DELIVERED",
@@ -142,6 +143,11 @@ const frameDonationSchema = new mongoose.Schema(
             default: null,
         },
 
+        loomisReference: {
+            type: String,
+            default: null,
+        },
+
         // Keep this only for old donations
         // created using schedulePickup.
         loomisConfirmationId: {
@@ -165,10 +171,7 @@ const frameDonationSchema = new mongoose.Schema(
 
         pickupAccessToken: {
             type: String,
-            unique: true,
-            sparse: true,
-            default: null,
-            index: true,
+            default: undefined,
         },
 
         pickupEvents: {
